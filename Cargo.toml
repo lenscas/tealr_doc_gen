@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name = "generate_docs"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "*"
+pulldown-cmark = "0.9.1"
+serde = "*"
+serde_json = "*"
+tealr = {git = "https://github.com/lenscas/tealr", features = ["mlua", "mlua_lua54", "mlua_vendored"]}
+v_htmlescape = "0.14.1"
