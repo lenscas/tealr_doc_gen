@@ -1,5 +1,10 @@
 [package]
+authors = ["Lenscas <lenscas@gmail.com>"]
+categories = ["command-line-utilities"]
+description = "A cli tool to create online documentation for apis made with tealr"
 edition = "2021"
+keywords = ["tealr", "teal", "lua", "online-docs", "documentation"]
+license = "MIT OR Apache-2.0"
 name = "tealr_doc_gen"
 version = "0.1.0"
 
