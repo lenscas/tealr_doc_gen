@@ -1,4 +1,4 @@
 /target
-/pages/*
+/pages/**
 /example.json
 libpgteal.d.tl

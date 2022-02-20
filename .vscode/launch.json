@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--json","example.json","--name", "libpgteal"],
+            "args": ["--json","example.json","--name", "libpgteal","--root","teal_docs"],
             "cwd": "${workspaceFolder}"
         },
         {
