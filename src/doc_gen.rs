@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tealr::{ExportedFunction, NameContainer, TealType, TypeGenerator, TypeWalker};
 
 use crate::markdown::parse_markdown;
@@ -8,7 +10,8 @@ const RIGHT_BRACKET_ESCAPED: &str = "&gt;";
 fn gen_type_name(v: &str) -> String {
     format!("<div class=\"card-header\"><code class=\"card-header-title\">{v}</code></div>")
 }
-fn gen_container(contents: &str, link_to: &str) -> String {
+fn gen_container(contents: &str, link_to: &Path) -> String {
+    let link_to = link_to.to_string_lossy();
     format!("<div class=\"card block\"><a href=\"{link_to}.html\">{contents}</a></div>")
     //format!("<div class=\"card block\">{contents}</div>")
 }
@@ -19,13 +22,14 @@ pub(crate) fn gen_doc(contents: &str, title: &str, side_bar: String) -> String {
         .replace("{TITLE_HERE}", title)
         .replace("{SIDE_BAR_HERE}", &side_bar)
 }
-pub(crate) fn gen_line(type_def: &TypeGenerator) -> String {
+pub(crate) fn gen_line(type_def: &TypeGenerator, path: &Path) -> String {
     let raw_name = tealr::type_parts_to_str(type_def.type_name.clone());
     let name = gen_type_name(&raw_name);
     let doc = parse_markdown(&type_def.type_doc);
+    let link_to = path.join("raw_name");
     gen_container(
         &format!("{name} <div class=\"card-content content\">{doc}</div>"),
-        &raw_name,
+        &link_to,
     )
 }
 fn get_doc(type_def: &TypeGenerator, name: &NameContainer) -> String {
@@ -186,7 +190,8 @@ pub(crate) fn gen_type_page(type_def: &TypeGenerator, side_bar: String) -> Strin
     )
 }
 
-pub(crate) fn gen_sidebar_item(link_to: &str, field_name: &str) -> String {
+pub(crate) fn gen_sidebar_item(link_to: &Path, field_name: &str) -> String {
+    let link_to = link_to.to_string_lossy();
     format!(
         "<li>
     <a href=\"{link_to}.html#{field_name}\">
@@ -211,6 +216,7 @@ pub(crate) fn gen_side_bar(
     all_types: &TypeWalker,
     current: Option<&TypeGenerator>,
     index: &str,
+    path: &Path,
 ) -> String {
     (all_types.iter().filter(|v| v.should_be_inlined))
         .chain(all_types.iter().filter(|v| !v.should_be_inlined))
@@ -221,6 +227,7 @@ pub(crate) fn gen_side_bar(
                 let x = tealr::type_parts_to_str(v.type_name.clone()).to_string();
                 (x.clone(), x)
             };
+            let link_to = path.join(link_to);
             let is_active = current
                 .map(|current| v.type_name == current.type_name)
                 .unwrap_or_else(|| v.should_be_inlined)
@@ -237,6 +244,7 @@ pub(crate) fn gen_side_bar(
                 .map(|v| gen_sidebar_item(&link_to, &String::from_utf8_lossy(&v.name)))
                 .collect::<String>();
             let methods = gen_sidebar_tab(methods, "Methods");
+            let link_to = link_to.to_string_lossy();
             format!(
                 "<li>
                     <a href=\"{link_to}.html\" class=\"{is_active}\">
