@@ -31,9 +31,17 @@ fn main() {
 ```
 # Install
 
-simply run `cargo install tealr_doc_gen` to install. Cargo will do the rest.
+To install, simply run 
+```
+cargo install tealr_doc_gen
+``` 
+Cargo will do the rest.
 
-After it is installed you can run `tealr_doc_gen --json path/to/json/file --name yourApiName` to generate the documentation.
+After it is installed, generating the online documentation is done by running
+```
+tealr_doc_gen --json path/to/json/file --name yourApiName
+```
+
 
 # Arguments
 
