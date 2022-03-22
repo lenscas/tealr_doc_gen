@@ -37,6 +37,13 @@
                 display: block;
             }
         }
+
+        .sticky-sidebar {
+            height: calc(100vh - 3.25rem);
+            position: sticky;
+            top: 0;
+            overflow: auto;
+        }
     </style>
 </head>
 
@@ -61,7 +68,7 @@
         </nav>
 
         <section class="main-content columns is-fullheight">
-            <aside class="column is-2 is-narrow-mobile is-fullheight section is-hidden-mobile">
+            <aside class="column is-2 is-narrow-mobile is-fullheight section is-hidden-mobile sticky-sidebar">
                 <p class="menu-label is-hidden-touch">Navigation</p>
                 <ul class="menu-list">
                     {SIDE_BAR_HERE}
