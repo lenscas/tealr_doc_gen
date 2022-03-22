@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
                 <div class=\"container\">
         ";
     let write_path = Path::new(&paths.build_dir).join(&paths.root);
-    let link_path = Path::new("/").join(&paths.root);
+    let link_path = Path::new("").join(&paths.root);
     create_dir_all(&write_path)?;
     for type_def in type_defs.iter().filter(|v| !v.should_be_inlined) {
         let side_bar = gen_side_bar(&type_defs, Some(type_def), &paths.name, &link_path);

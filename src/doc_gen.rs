@@ -1,11 +1,19 @@
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
-use tealr::{ExportedFunction, NameContainer, TealType, TypeGenerator, TypeWalker};
+use tealr::{ExportedFunction, NameContainer, NamePart, TealType, TypeGenerator, TypeWalker};
 
 use crate::markdown::parse_markdown;
 
 const LEFT_BRACKET_ESCAPED: &str = "&lt;";
 const RIGHT_BRACKET_ESCAPED: &str = "&gt;";
+
+fn dedupe_by<T, K: Eq + std::hash::Hash + 'static, I: Iterator<Item = T>>(
+    iter: I,
+    deduper: impl Fn(&T) -> K,
+) -> impl Iterator<Item = T> {
+    let mut dupes = HashSet::new();
+    iter.filter(move |v| dupes.insert(deduper(v)))
+}
 
 fn gen_type_name(v: &str) -> String {
     format!("<div class=\"card-header\"><code class=\"card-header-title\">{v}</code></div>")
@@ -26,7 +34,7 @@ pub(crate) fn gen_line(type_def: &TypeGenerator, path: &Path) -> String {
     let raw_name = tealr::type_parts_to_str(type_def.type_name.clone());
     let name = gen_type_name(&raw_name);
     let doc = parse_markdown(&type_def.type_doc);
-    let link_to = path.join("raw_name");
+    let link_to = path.join(raw_name.as_ref());
     gen_container(
         &format!("{name} <div class=\"card-content content\">{doc}</div>"),
         &link_to,
@@ -80,14 +88,25 @@ fn create_methods_iter<'a>(
         .chain(type_def.meta_method_mut.iter().map(|v| (true, v)))
 }
 
+fn parse_namepart(part: &[NamePart]) -> String {
+    part.iter()
+        .map(|v| match v {
+            tealr::NamePart::Symbol(x) => v_htmlescape::escape(x).to_string(),
+            tealr::NamePart::Type(x) => gen_type(x, true),
+        })
+        .collect::<String>()
+}
+
 pub fn get_type(type_def: &TypeGenerator) -> String {
-    let fields = type_def
-        .fields
-        .iter()
-        .map(|(name, written_type)| {
-            let doc = get_doc(type_def, &NameContainer::from(name.clone()));
-            format!(
-                "
+    let fields = dedupe_by(type_def.fields.iter(), |(name_container, _)| {
+        name_container.to_owned()
+    })
+    .map(|(name, written_type)| {
+        let doc = get_doc(type_def, name);
+        let written_type = parse_namepart(written_type);
+        let name = String::from_utf8_lossy(name);
+        format!(
+            "
                     <div class=\"card block\">
                         <div class=\"card-heading\" id={name}>
                             <code class=\"card-header-title\"><p>{name}: {written_type}</p></code>
@@ -95,21 +114,15 @@ pub fn get_type(type_def: &TypeGenerator) -> String {
                         {doc}
                     </div>
                 "
-            )
-        })
-        .collect::<String>();
+        )
+    })
+    .collect::<String>();
     let methods = create_methods_iter(type_def)
         .map(|(_, v)| {
             let method_name = String::from_utf8_lossy(&v.name);
             let signature = {
-                let signature = v
-                    .signature
-                    .iter()
-                    .map(|v| match v {
-                        tealr::NamePart::Symbol(x) => v_htmlescape::escape(x).to_string(),
-                        tealr::NamePart::Type(x) => gen_type(x, true),
-                    })
-                    .collect::<String>();
+                let signature = parse_namepart(&v.signature);
+
                 let meta_method = if v.is_meta_method { "metamethod" } else { "" };
                 let method_name = String::from_utf8_lossy(&v.name);
                 format!("{meta_method} {method_name}: {signature}")
@@ -190,8 +203,9 @@ pub(crate) fn gen_type_page(type_def: &TypeGenerator, side_bar: String) -> Strin
     )
 }
 
-pub(crate) fn gen_sidebar_item(link_to: &Path, field_name: &str) -> String {
+pub(crate) fn gen_sidebar_item(link_to: &Path, field_name: &NameContainer) -> String {
     let link_to = link_to.to_string_lossy();
+    let field_name = String::from_utf8_lossy(field_name);
     format!(
         "<li>
     <a href=\"{link_to}.html#{field_name}\">
@@ -233,15 +247,13 @@ pub(crate) fn gen_side_bar(
                 .unwrap_or_else(|| v.should_be_inlined)
                 .then(|| "is-active")
                 .unwrap_or("");
-            let fields = v
-                .fields
-                .iter()
+            let fields = dedupe_by(v.fields.iter(), |(v, _)| v.to_owned())
                 .map(|(field_name, _)| gen_sidebar_item(&link_to, field_name))
                 .collect::<String>();
             let fields = gen_sidebar_tab(fields, "Fields");
             let methods = create_methods_iter(v)
                 .map(|(_, v)| v)
-                .map(|v| gen_sidebar_item(&link_to, &String::from_utf8_lossy(&v.name)))
+                .map(|v| gen_sidebar_item(&link_to, &v.name))
                 .collect::<String>();
             let methods = gen_sidebar_tab(methods, "Methods");
             let link_to = link_to.to_string_lossy();
