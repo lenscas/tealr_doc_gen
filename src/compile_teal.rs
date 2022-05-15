@@ -10,10 +10,10 @@ pub(crate) struct CompileResult {
 pub(crate) fn compile_teal(code: &str) -> CompileResult {
     let lua = tealr::mlu::mlua::Lua::new();
     let code = code
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("'", "\\'")
-        .replace("\n", "\\n");
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n");
 
     let code = format!(
         "

@@ -16,6 +16,7 @@ clap = "3.0.14"
 pulldown-cmark = "0.9.1"
 serde = "1.0.136"
 serde_json = "1.0.79"
+#tealr = {path = "../tealr", features = ["mlua", "mlua_lua54", "mlua_vendored"]}
 tealr = {version = "0.8.0", git = "https://github.com/lenscas/tealr", features = ["mlua", "mlua_lua54", "mlua_vendored"]}
 #tealr = {version = "0.8.0", git = "https://github.com/lenscas/tealr", features = ["mlua", "mlua_lua54", "mlua_vendored"]}
 v_htmlescape = "0.14.1"
