@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use doc_gen::get_type_name;
+use doc_gen::{generate_global, get_type_name};
 
 use crate::{
     app::get_paths,
@@ -19,6 +19,8 @@ fn main() -> anyhow::Result<()> {
     let json = read_to_string(paths.json)?;
     let type_defs: tealr::TypeWalker = serde_json::from_str(&json)?;
 
+    let link_path = Path::new("").join(&paths.root);
+
     let mut containers = String::new();
     containers += &type_defs
         .iter()
@@ -28,6 +30,21 @@ fn main() -> anyhow::Result<()> {
         })
         .map(get_type)
         .collect::<String>();
+    let globals = type_defs
+        .global_instances_off
+        .iter()
+        .map(|v| generate_global(v, &link_path))
+        .collect::<String>();
+    containers += "
+        <div class=\"panel\">
+            <div class=\"panel-heading\">
+                <p class=\"panel-header-title\">Globals:</p>
+            </div>
+            <div class=\"panel-block\">
+                <div class=\"container\">
+        ";
+    containers += &globals;
+    containers += "</div></div></div>";
     containers += "<div class=\"panel\">
             <div class=\"panel-heading\">
                 <p class=\"panel-header-title\">Types:</p>
@@ -36,7 +53,7 @@ fn main() -> anyhow::Result<()> {
                 <div class=\"container\">
         ";
     let write_path = Path::new(&paths.build_dir).join(&paths.root);
-    let link_path = Path::new("").join(&paths.root);
+
     create_dir_all(&write_path)?;
     for type_def in type_defs.iter().filter(|v| match v {
         tealr::TypeGenerator::Record(x) => !x.should_be_inlined,
