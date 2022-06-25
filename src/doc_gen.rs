@@ -1,4 +1,8 @@
-use std::{borrow::Cow, collections::HashSet, path::Path};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use tealr::{
     EnumGenerator, ExportedFunction, NameContainer, NamePart, RecordGenerator, TealType,
@@ -308,54 +312,78 @@ pub(crate) fn gen_side_bar(
     index: &str,
     path: &Path,
 ) -> String {
-    (all_types.iter().filter(|v| type_should_be_inlined(v)))
-        .chain(all_types.iter().filter(|v| !type_should_be_inlined(v)))
+    all_types
+        .global_instances_off
+        .iter()
         .map(|v| {
-            let (name, link_to) = if type_should_be_inlined(v) {
-                (index.to_string(), "index".to_string())
-            } else {
-                let x = get_type_name(v).to_string();
-                (x.clone(), x)
-            };
-            let link_to = path.join(link_to);
+            (
+                v.name.to_string(),
+                index.to_string() + "#" + &v.name,
+                "".to_string(),
+                "".to_string(),
+            )
+        })
+        .chain(
+            (all_types
+                .given_types
+                .iter()
+                .filter(|v| type_should_be_inlined(v)))
+            .chain(
+                all_types
+                    .given_types
+                    .iter()
+                    .filter(|v| !type_should_be_inlined(v)),
+            )
+            .map(|v| {
+                let (name, link_to) = if type_should_be_inlined(v) {
+                    (index.to_string(), "index".to_string())
+                } else {
+                    let x = get_type_name(v).to_string();
+                    (x.clone(), x)
+                };
+                let link_to = path.join(link_to);
 
-            let is_active = current
-                .map(|current| get_type_name(v) == get_type_name(current))
-                .unwrap_or_else(|| type_should_be_inlined(v))
-                .then(|| "is-active")
-                .unwrap_or("");
-            let res = match v {
-                TypeGenerator::Record(v) => {
-                    let fields = dedupe_by(v.fields.iter(), |(v, _)| v.to_owned())
-                        .map(|(field_name, _)| gen_sidebar_item(&link_to, field_name))
-                        .collect::<String>();
-                    let fields = gen_sidebar_tab(fields, "Fields");
-                    let methods = create_methods_iter(v)
-                        .map(|(_, v)| v)
-                        .map(|v| gen_sidebar_item(&link_to, &v.name))
-                        .collect::<String>();
-                    let methods = gen_sidebar_tab(methods, "Methods");
+                let is_active = current
+                    .map(|current| get_type_name(v) == get_type_name(current))
+                    .unwrap_or_else(|| type_should_be_inlined(v))
+                    .then(|| "is-active")
+                    .unwrap_or("");
+                let res = match v {
+                    TypeGenerator::Record(v) => {
+                        let fields = dedupe_by(v.fields.iter(), |(v, _)| v.to_owned())
+                            .map(|(field_name, _)| gen_sidebar_item(&link_to, field_name))
+                            .collect::<String>();
+                        let fields = gen_sidebar_tab(fields, "Fields");
+                        let methods = create_methods_iter(v)
+                            .map(|(_, v)| v)
+                            .map(|v| gen_sidebar_item(&link_to, &v.name))
+                            .collect::<String>();
+                        let methods = gen_sidebar_tab(methods, "Methods");
 
-                    format!(
-                        "
+                        format!(
+                            "
                        {fields}
                        {methods}
                         "
-                    )
-                }
-                TypeGenerator::Enum(x) => {
-                    let items = x
-                        .variants
-                        .iter()
-                        .map(|v| gen_sidebar_item(&link_to, v))
-                        .collect();
-                    gen_sidebar_tab(items, "variants")
-                }
-            };
-            let link_to_as_string = link_to.to_string_lossy();
+                        )
+                    }
+                    TypeGenerator::Enum(x) => {
+                        let items = x
+                            .variants
+                            .iter()
+                            .map(|v| gen_sidebar_item(&link_to, v))
+                            .collect();
+                        gen_sidebar_tab(items, "variants")
+                    }
+                };
+                let link_to_as_string = link_to.to_string_lossy().to_string() + ".html";
+                (name, link_to_as_string, is_active.to_string(), res)
+            }),
+        )
+        .map(|(name, link_to_as_string, is_active, res)| {
             format! {
                     "<li>
-                    <a href=\"{link_to_as_string}.html\" class=\"{is_active}\">
+                    <a href=\"{link_to_as_string}\" class=\"{is_active}\">
                         <span class=\"icon\"><i class=\"fa fa-file\"></i></span> {name}
                     </a>
                     <ul>
@@ -365,4 +393,30 @@ pub(crate) fn gen_side_bar(
             }
         })
         .collect::<String>()
+}
+
+pub fn generate_global(global: &tealr::GlobalInstance, base_url: &Path) -> String {
+    let name = &global.name;
+    let type_name = parse_namepart(&global.teal_type);
+
+    let docs = if !global.doc.is_empty() {
+        let x = parse_markdown(&global.doc);
+        format!("<div class=\"card-content content\">{x}</div>")
+    } else {
+        String::from("")
+    };
+
+    format!(
+        "
+        <div class=\"card block\">
+            <div class=\"card-header\">
+                <code class=\"card-header-title\" id=\"{name}\">
+                    {name}:{type_name}
+                </code>
+            </div>
+            {docs}
+        </div>
+    
+    "
+    )
 }
