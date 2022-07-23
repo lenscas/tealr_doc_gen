@@ -5,7 +5,12 @@ pub(crate) struct Paths {
     pub(crate) build_dir: String,
 }
 
-pub(crate) fn get_paths() -> Paths {
+pub(crate) enum Modes {
+    Credits,
+    GenerateDocs(Paths),
+}
+
+pub(crate) fn get_paths() -> Modes {
     let matches = clap::App::new("tealr doc gen")
         .arg(
             clap::Arg::new("json")
@@ -13,7 +18,7 @@ pub(crate) fn get_paths() -> Paths {
                 .short('j')
                 .takes_value(true)
                 .help("Path to the json file")
-                .required(true),
+                .required_unless_present("credits"),
         )
         .arg(
             clap::Arg::new("name")
@@ -21,7 +26,7 @@ pub(crate) fn get_paths() -> Paths {
                 .short('n')
                 .takes_value(true)
                 .help("Name of the library")
-                .required(true),
+                .required_unless_present("credits"),
         )
         .arg(
             clap::Arg::new("root")
@@ -41,16 +46,26 @@ pub(crate) fn get_paths() -> Paths {
                 .default_value("./pages")
                 .default_missing_value("./pages"),
         )
+        .arg(
+            clap::Arg::new("credits")
+                .long("credits")
+                .takes_value(false)
+                .help("Displays the credits"),
+        )
         .get_matches();
+    if matches.contains_id("credits") {
+        return Modes::Credits;
+    }
 
     let json = matches.value_of("json").unwrap().to_owned();
     let name = matches.value_of("name").unwrap().to_owned();
     let root = matches.value_of("root").unwrap().to_owned();
     let build_dir = matches.value_of("build_folder").unwrap().to_owned();
-    Paths {
+
+    Modes::GenerateDocs(Paths {
         name,
         root,
         json,
         build_dir,
-    }
+    })
 }
