@@ -430,9 +430,9 @@ dependencies = [
 
 [[package]]
 name = "mlua"
-version = "0.7.4"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29e2194305aa8301d5da9c1c98640047f4219f6b95c190f6860338ab9872b686"
+checksum = "a82d0b12c7c8d3bdda5933d2aa322c76e4833d822796495f299990ca652bd1bf"
 dependencies = [
  "bstr",
  "cc",
@@ -703,7 +703,7 @@ dependencies = [
 [[package]]
 name = "tealr"
 version = "0.8.2"
-source = "git+https://github.com/lenscas/tealr#d1f7416e132e8702954bd255f13a0baede76620b"
+source = "git+https://github.com/lenscas/tealr#6c497dd6f1b49b7b1dd969c9fc1756e370401787"
 dependencies = [
  "bstr",
  "itertools",
@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "tealr_derive"
 version = "0.8.2"
-source = "git+https://github.com/lenscas/tealr#d1f7416e132e8702954bd255f13a0baede76620b"
+source = "git+https://github.com/lenscas/tealr#6c497dd6f1b49b7b1dd969c9fc1756e370401787"
 dependencies = [
  "proc-macro2",
  "quote",
