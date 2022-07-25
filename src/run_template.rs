@@ -3,13 +3,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use tealr::{
     mlu::{ExportInstances, FromToLua, TealData},
     EnumGenerator, GlobalInstance, NameContainer, RecordGenerator, TypeGenerator, TypeName,
+    TypeWalker,
 };
 
 use crate::{
-    app::Paths,
+    app::{Paths, TemplateKind},
     doc_gen::{get_type_name, type_should_be_inlined},
 };
 
@@ -134,10 +136,7 @@ impl ExportInstances for GlobalInstances {
     }
 }
 
-pub(crate) fn run_template(paths: Paths) -> Result<(), anyhow::Error> {
-    let json = read_to_string(paths.json)?;
-    let type_defs: tealr::TypeWalker = serde_json::from_str(&json)?;
-
+pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(), anyhow::Error> {
     let link_path = Path::new("/").join(&paths.root);
 
     let sidebar: Vec<SideBar> = type_defs
@@ -212,6 +211,7 @@ pub(crate) fn run_template(paths: Paths) -> Result<(), anyhow::Error> {
             None,
             None,
             link_path.clone(),
+            &paths.template_kind,
         )?;
     }
     run_and_write(
@@ -221,8 +221,15 @@ pub(crate) fn run_template(paths: Paths) -> Result<(), anyhow::Error> {
         Some(type_defs.global_instances_off),
         Some(type_defs.given_types),
         link_path,
+        &paths.template_kind,
     )?;
     Ok(())
+}
+
+pub(crate) fn run_template(paths: Paths) -> Result<(), anyhow::Error> {
+    let json = read_to_string(&paths.json)?;
+    let type_defs: tealr::TypeWalker = serde_json::from_str(&json)?;
+    run_from_walker(paths, type_defs)
 }
 
 fn run_and_write(
@@ -232,15 +239,29 @@ fn run_and_write(
     global_instances: Option<Vec<tealr::GlobalInstance>>,
     all_types: Option<Vec<TypeGenerator>>,
     link_path: PathBuf,
+    template_kind: &TemplateKind,
 ) -> Result<(), anyhow::Error> {
     let type_name = if type_should_be_inlined(type_def) {
         "index".into()
     } else {
         get_type_name(type_def)
     };
+    let base_template = include_str!("../base_template.etlua");
+    let base_runner = include_str!("../base_run_template.lua");
+    let (template, template_runner) = match template_kind {
+        TemplateKind::Builtin => (base_template.to_string(), base_runner.to_string()),
+        TemplateKind::FromLua(x) => (
+            base_template.to_string(),
+            std::fs::read_to_string(x)
+                .with_context(|| format!("Could not load doc template runner. File {x}"))?,
+        ),
+        TemplateKind::FromTemplate(x) => (
+            std::fs::read_to_string(x)
+                .with_context(|| format!("Could not load doc template. File {x}"))?,
+            base_runner.to_string(),
+        ),
+    };
     let etlua = include_str!("../etlua.lua").to_string();
-    let template = include_str!("../base_template.etlua").to_string();
-    let template_runner = include_str!("../base_run_template.lua");
     let lua = unsafe { tealr::mlu::mlua::Lua::unsafe_new() };
     let instance_setter = GlobalInstances {
         side_bar: sidebar,
@@ -255,7 +276,7 @@ fn run_and_write(
     tealr::mlu::set_global_env(instance_setter, &lua)?;
 
     let document: tealr::mlu::mlua::String = lua
-        .load(template_runner)
+        .load(&template_runner)
         .set_name("template_runner")?
         .call(())?;
     let page_path = write_path.join(format!("{type_name}.html"));
@@ -263,9 +284,7 @@ fn run_and_write(
     Ok(())
 }
 
-//will be used later :)
-#[allow(dead_code)]
-fn generate_self() -> Result<(), Box<dyn std::error::Error>> {
+pub fn generate_self() -> Result<TypeWalker, anyhow::Error> {
     let x = tealr::TypeWalker::new()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
@@ -282,7 +301,5 @@ fn generate_self() -> Result<(), Box<dyn std::error::Error>> {
         .process_type::<TestDocs>()
         .process_type_inline::<TestDocs>()
         .document_global_instance::<GlobalInstances>()?;
-    std::fs::write("./self.json", serde_json::to_string_pretty(&x)?)?;
-    std::fs::write("./self.d.tl", x.generate_global("tealr_doc_gen")?)?;
-    Ok(())
+    Ok(x)
 }
