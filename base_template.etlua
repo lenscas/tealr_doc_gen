@@ -157,6 +157,16 @@ end
                             </div>
                         </div>
                     </div>
+                    <div class="navbar-item has-dropdown is-hoverable">
+                        <a class="navbar-link">
+                            Definition files
+                        </a>
+                        <div class="navbar-dropdown is-boxed">
+                            <% for k,v in pairs(definition_config) do %>
+                                <a class="navbar-item" href="definitions/<%=  library_name .. v.extension %>"><%=k%></a>
+                            <% end %>
+                        </div>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -245,15 +255,17 @@ end
                                                 <p class="subtitle">Globals:</p>
                                             </div>
                                             <div class="panel-block">
-                                                <% for _, global_instance in ipairs(globals) do %>
-                                                    <div class="card block">
-                                                        <div id="<%= global_instance.name %>" class="card-heading">
-                                                            <code class="card-header-title">
-                                                                <p>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </p>
-                                                            </code>
+                                                <div class="container">
+                                                    <% for _, global_instance in ipairs(globals) do %>
+                                                        <div class="card block">
+                                                            <div id="<%= global_instance.name %>" class="card-heading">
+                                                                <code class="card-header-title">
+                                                                    <p>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </p>
+                                                                </code>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                <% end %>
+                                                    <% end %>
+                                                </div>
                                             </div>
                                         </div>
                                 <%

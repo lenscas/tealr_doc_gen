@@ -43,7 +43,7 @@ pub(crate) fn parse_markdown(markdown: &str) -> String {
                         eprintln!("{}",res.type_errors.join("\n"))
                     }
                     match res.compiled {
-                        Some(res) =>{ 
+                        Some(res) =>{
                             let res = vec![
                                 Event::Html(
                                     CowStr::from(

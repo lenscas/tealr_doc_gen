@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{create_dir_all, read_to_string},
     path::{Path, PathBuf},
 };
@@ -11,7 +12,7 @@ use tealr::{
 };
 
 use crate::{
-    app::{Paths, TemplateKind},
+    app::{DefTemplateConfig, DefTemplateKind, Paths, TemplateKind},
     doc_gen::{get_type_name, type_should_be_inlined},
 };
 
@@ -43,7 +44,7 @@ impl TealData for TestDocs {
         fields.add_field_function_get("a", |_, _| Ok(1))
     }
 }
-struct GlobalInstances {
+struct GlobalInstancesDoc {
     side_bar: Vec<SideBar>,
     link_path: PathBuf,
     etlua: String,
@@ -52,8 +53,10 @@ struct GlobalInstances {
     type_name: String,
     all_types: Option<Vec<TypeGenerator>>,
     globals: Option<Vec<GlobalInstance>>,
+    def_files: HashMap<String, DefTemplateConfig>,
+    library_name: String,
 }
-impl Default for GlobalInstances {
+impl Default for GlobalInstancesDoc {
     fn default() -> Self {
         Self {
             side_bar: Default::default(),
@@ -67,11 +70,13 @@ impl Default for GlobalInstances {
             type_name: Default::default(),
             all_types: Default::default(),
             globals: Default::default(),
+            def_files: Default::default(),
+            library_name: Default::default(),
         }
     }
 }
 
-impl ExportInstances for GlobalInstances {
+impl ExportInstances for GlobalInstancesDoc {
     fn add_instances<'lua, T: tealr::mlu::InstanceCollector<'lua>>(
         self,
         instance_collector: &mut T,
@@ -101,6 +106,8 @@ impl ExportInstances for GlobalInstances {
                 lua,
             )
         })?;
+        instance_collector.add_instance("library_name".into(), |_| Ok(self.library_name))?;
+        instance_collector.add_instance("definition_config".into(), |_| Ok(self.def_files))?;
         instance_collector.add_instance("dedupe_by".into(), |lua| {
             tealr::mlu::TypedFunction::from_rust(
                 |lua,
@@ -137,6 +144,9 @@ impl ExportInstances for GlobalInstances {
 }
 
 pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(), anyhow::Error> {
+    let write_path = Path::new(&paths.build_dir).join(&paths.root);
+    create_dir_all(&write_path)?;
+    create_d_file(type_defs.clone(), write_path.clone(), &paths.name, &paths)?;
     let link_path = Path::new("/").join(&paths.root);
 
     let sidebar: Vec<SideBar> = type_defs
@@ -179,8 +189,6 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
             }
         })
         .collect();
-    let write_path = Path::new(&paths.build_dir).join(&paths.root);
-    create_dir_all(&write_path)?;
     let mut z = RecordGenerator::new::<RecordGenerator>(true);
     for type_def in type_defs.iter() {
         match type_def {
@@ -212,6 +220,8 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
             None,
             link_path.clone(),
             &paths.template_kind,
+            paths.def_config.templates.clone(),
+            paths.name.clone(),
         )?;
     }
     run_and_write(
@@ -222,6 +232,8 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
         Some(type_defs.given_types),
         link_path,
         &paths.template_kind,
+        paths.def_config.templates,
+        paths.name,
     )?;
     Ok(())
 }
@@ -240,6 +252,8 @@ fn run_and_write(
     all_types: Option<Vec<TypeGenerator>>,
     link_path: PathBuf,
     template_kind: &TemplateKind,
+    def_config: HashMap<String, DefTemplateConfig>,
+    library_name: String,
 ) -> Result<(), anyhow::Error> {
     let type_name = if type_should_be_inlined(type_def) {
         "index".into()
@@ -263,7 +277,7 @@ fn run_and_write(
     };
     let etlua = include_str!("../etlua.lua").to_string();
     let lua = unsafe { tealr::mlu::mlua::Lua::unsafe_new() };
-    let instance_setter = GlobalInstances {
+    let instance_setter = GlobalInstancesDoc {
         side_bar: sidebar,
         link_path,
         etlua,
@@ -272,6 +286,8 @@ fn run_and_write(
         type_name: type_name.to_string(),
         all_types,
         globals: global_instances,
+        def_files: def_config,
+        library_name,
     };
     tealr::mlu::set_global_env(instance_setter, &lua)?;
 
@@ -284,7 +300,87 @@ fn run_and_write(
     Ok(())
 }
 
-pub fn generate_self() -> Result<TypeWalker, anyhow::Error> {
+#[derive(Default)]
+struct GlobalsDefFile {
+    etlua: String,
+    module: TypeWalker,
+    template: String,
+    is_global: bool,
+    name: String,
+}
+impl ExportInstances for GlobalsDefFile {
+    fn add_instances<'lua, T: tealr::mlu::InstanceCollector<'lua>>(
+        self,
+        instance_collector: &mut T,
+    ) -> tealr::mlu::mlua::Result<()> {
+        instance_collector.add_instance("module".into(), |_| Ok(self.module))?;
+        instance_collector.add_instance("etlua".into(), |lua| {
+            lua.load(&self.etlua).set_name("etlua")?.into_function()
+        })?;
+        instance_collector.add_instance("global_or_local".into(), |_| {
+            Ok(if self.is_global { "global" } else { "local" })
+        })?;
+        instance_collector.add_instance("template".into(), |_| Ok(self.template))?;
+        instance_collector.add_instance("name".into(), |_| Ok(self.name))?;
+        Ok(())
+    }
+}
+
+pub(crate) fn create_d_file(
+    walker: TypeWalker,
+    path: PathBuf,
+    name: &str,
+    config: &Paths,
+) -> Result<(), anyhow::Error> {
+    let runner = match &config.def_config.runner {
+        crate::app::DefTemplateRunnerKind::Builtin => {
+            include_str!("../base_run_template.lua").to_string()
+        }
+        crate::app::DefTemplateRunnerKind::Custom(x) => std::fs::read_to_string(&x)
+            .with_context(|| format!("Failed loading custom runner: {x}"))?,
+    };
+    for config in config.def_config.templates.values() {
+        let template = match &config.template {
+            crate::app::DefTemplateKind::Teal => {
+                include_str!("../base_teal_definition_template.etlua").to_string()
+            }
+            crate::app::DefTemplateKind::Custom(x) => std::fs::read_to_string(&x)
+                .with_context(|| format!("Failed to load custom template: {x}"))?,
+        };
+        let lua = unsafe { tealr::mlu::mlua::Lua::unsafe_new() };
+        let etlua = include_str!("../etlua.lua").to_string();
+        let x = GlobalsDefFile {
+            etlua,
+            module: walker.clone(),
+            template,
+            is_global: true,
+            name: name.to_string(),
+        };
+        tealr::mlu::set_global_env(x, &lua)?;
+
+        let document: tealr::mlu::mlua::String =
+            lua.load(&runner).set_name("template_runner")?.call(())?;
+        let page_path = path.join("definitions");
+        create_dir_all(&page_path).with_context(|| {
+            format!(
+                "Could not create directories needed for:{}.",
+                page_path.to_string_lossy()
+            )
+        })?;
+        let extension = if config.extension.starts_with('.') {
+            &config.extension[1..]
+        } else {
+            &config.extension
+        };
+        let page_path = page_path.join(format!("{name}.{extension}"));
+        std::fs::write(&page_path, document.as_bytes())
+            .with_context(|| format!("Could not write file{}", page_path.to_string_lossy()))?;
+    }
+
+    Ok(())
+}
+
+pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
     let x = tealr::TypeWalker::new()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
@@ -298,8 +394,24 @@ pub fn generate_self() -> Result<TypeWalker, anyhow::Error> {
         .process_type::<tealr::TypeWalker>()
         .process_type::<Members>()
         .process_type::<SideBar>()
-        .process_type::<TestDocs>()
-        .process_type_inline::<TestDocs>()
-        .document_global_instance::<GlobalInstances>()?;
+        .process_type::<DefTemplateConfig>()
+        .process_type::<DefTemplateKind>()
+        .document_global_instance::<GlobalInstancesDoc>()?;
+    Ok(x)
+}
+
+pub fn generate_self_def() -> Result<TypeWalker, anyhow::Error> {
+    let x = tealr::TypeWalker::new()
+        .process_type::<tealr::EnumGenerator>()
+        .process_type::<tealr::ExportedFunction>()
+        .process_type::<tealr::Field>()
+        .process_type::<tealr::GlobalInstance>()
+        .process_type::<tealr::KindOfType>()
+        .process_type::<tealr::NamePart>()
+        .process_type::<tealr::RecordGenerator>()
+        .process_type::<tealr::TealType>()
+        .process_type::<tealr::TypeGenerator>()
+        .process_type::<tealr::TypeWalker>()
+        .document_global_instance::<GlobalsDefFile>()?;
     Ok(x)
 }

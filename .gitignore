@@ -1,4 +1,11 @@
 /target
 /pages/**
-/example.json
 libpgteal.d.tl
+*.lua
+!/base_run_template.lua
+!/etlua.lua
+*.json
+*.etlua
+!/base_template.etlua
+!/base_teal_definition_template.etlua
+*.json
