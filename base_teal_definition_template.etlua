@@ -1,0 +1,92 @@
+<%
+function render(str)
+%>
+    <%- str %>
+<%
+end
+function renderTealTypeOf(type_parts, with, maybe_extend_with)
+    local total_to_render = {with}
+    for k,v in ipairs(type_parts) do
+        local name = v:GetSymbolOrNil()
+        if name then
+            table.insert(total_to_render,name)
+        else
+            teal_type = v:GetTypeOrNil()
+            if teal_type.type_kind == "External" and maybe_extend_with then
+                table.insert(total_to_render, maybe_extend_with)
+                table.insert(total_to_render, ".")
+            end
+            table.insert(total_to_render, teal_type.name)
+        end
+    end
+    render(table.concat(total_to_render,""))
+end
+function render_member(member)
+    local sig = member.teal_type or member.signature
+    renderTealTypeOf(sig, "    " .. member.name .. " : ")
+end
+function render_members(members,doc)
+    for _,member in ipairs(members) do
+        local docs = doc[member.name]
+        if docs then
+            render("    --"..string.gsub(docs, "\n", "\n        --"))
+        end
+        render_member(member)
+    end
+end
+
+%>
+
+<%- global_or_local %> record <%- name %>
+    <% 
+        for _, teal_type in ipairs(module.given_types) do 
+            local enum = teal_type:GetEnumOrNil()
+            if enum then
+                renderTealTypeOf(enum.name,"enum ")
+                for _, variant in ipairs(enum.variants) do
+                    render('    "' .. variant .. '"')
+                end
+    %>
+    end
+    <%
+            end
+            local record = teal_type:GetRecordOrNil()
+            if record then
+                if not record.should_be_inlined then
+    %>
+    <% renderTealTypeOf(record.type_name,"record ") %>
+        <%= (record.is_userdata and "userdata") or "" %>
+    <%
+                end
+                        render("--"..string.gsub(record.type_doc, "\n", "\n        --"))
+                        render_members(record.fields,record.documentation)
+                        render_members(record.static_fields,record.documentation)
+                        render_members(record.methods,record.documentation)
+                        render_members(record.mut_methods,record.documentation)
+                        render_members(record.functions,record.documentation)
+                        render_members(record.mut_functions,record.documentation)
+                        render_members(record.meta_method,record.documentation)
+                        render_members(record.meta_method_mut,record.documentation)
+                        render_members(record.meta_function,record.documentation)
+                        render_members(record.meta_function_mut,record.documentation)
+                if not record.should_be_inlined then 
+    %>
+    end
+    <%
+                end
+
+            end
+        end
+    %>
+end
+<%
+
+for _, global_instance in ipairs(module.global_instances_off) do
+    if (not global_instance.doc) or global_instance.doc == "" then  
+        render("--"..string.gsub(global_instance.doc, "\n", "\n        --"))
+    end
+    renderTealTypeOf(global_instance.teal_type, "global " .. global_instance.name .. " : ", name)
+end
+%>
+
+return <%- name %>
