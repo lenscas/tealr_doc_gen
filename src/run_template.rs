@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Context;
 use tealr::{
-    mlu::{ExportInstances, FromToLua, TealData},
+    mlu::{self, ExportInstances, FromToLua, TealData, TypedFunction},
     EnumGenerator, GlobalInstance, NameContainer, RecordGenerator, TypeGenerator, TypeName,
     TypeWalker,
 };
@@ -14,6 +14,7 @@ use tealr::{
 use crate::{
     app::{DefTemplateConfig, DefTemplateKind, Paths, TemplateKind},
     doc_gen::{get_type_name, type_should_be_inlined},
+    markdown::MarkdownEvent,
 };
 
 #[derive(FromToLua, TypeName, Clone)]
@@ -30,7 +31,7 @@ struct Members {
 #[derive(tealr::mlu::TealDerive)]
 struct TestDocs;
 impl TealData for TestDocs {
-    fn add_methods<'lua, T: tealr::mlu::TealDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<'lua, T: mlu::TealDataMethods<'lua, Self>>(methods: &mut T) {
         methods.document("```teal_lua");
         methods.document("local a:number = 1");
         methods.document("```");
@@ -39,7 +40,7 @@ impl TealData for TestDocs {
         methods.document_type("some documentation for the entire type");
     }
 
-    fn add_fields<'lua, F: tealr::mlu::TealDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<'lua, F: mlu::TealDataFields<'lua, Self>>(fields: &mut F) {
         fields.document("some docs for the next field");
         fields.add_field_function_get("a", |_, _| Ok(1))
     }
@@ -55,6 +56,7 @@ struct GlobalInstancesDoc {
     globals: Option<Vec<GlobalInstance>>,
     def_files: HashMap<String, DefTemplateConfig>,
     library_name: String,
+    definition_files_folder: String,
 }
 impl Default for GlobalInstancesDoc {
     fn default() -> Self {
@@ -72,15 +74,21 @@ impl Default for GlobalInstancesDoc {
             globals: Default::default(),
             def_files: Default::default(),
             library_name: Default::default(),
+            definition_files_folder: Default::default(),
         }
     }
 }
 
+type MarkdownEventTable = Vec<MarkdownEvent>;
+type OptionalMarkdownEvent = Option<MarkdownEvent>;
+
+tealr::create_union_mlua!(pub enum MarkdownTransformation = MarkdownEventTable | OptionalMarkdownEvent );
+
 impl ExportInstances for GlobalInstancesDoc {
-    fn add_instances<'lua, T: tealr::mlu::InstanceCollector<'lua>>(
+    fn add_instances<'lua, T: mlu::InstanceCollector<'lua>>(
         self,
         instance_collector: &mut T,
-    ) -> tealr::mlu::mlua::Result<()> {
+    ) -> mlu::mlua::Result<()> {
         let side_bar = self.side_bar;
         let link_path = self.link_path;
         let etlua = self.etlua;
@@ -89,6 +97,7 @@ impl ExportInstances for GlobalInstancesDoc {
         let type_name = self.type_name;
         let all_types = self.all_types;
         let globals = self.globals;
+        let definition_files_folder = self.definition_files_folder;
 
         instance_collector.add_instance("side_bar_types".into(), move |_| Ok(side_bar))?;
         instance_collector.add_instance("etlua".into(), move |lua| {
@@ -101,19 +110,40 @@ impl ExportInstances for GlobalInstancesDoc {
         instance_collector.add_instance("all_types".into(), move |_| Ok(all_types))?;
         instance_collector.add_instance("create_link".into(), move |lua| {
             let link = link_path;
-            tealr::mlu::TypedFunction::from_rust(
+            TypedFunction::from_rust(
                 move |_, name: String| Ok(link.join(name + ".html").to_string_lossy().to_string()),
                 lua,
             )
         })?;
+        instance_collector.add_instance("definition_file_folder".into(), |_| {
+            Ok(definition_files_folder)
+        })?;
+        instance_collector.add_instance("markdown_codeblock_kind_creator".into(), |_| {
+            Ok(crate::markdown::MarkdownCodeBlockKindCreator {})
+        })?;
+        instance_collector.add_instance("markdown_event_creator".into(), |_| {
+            Ok(crate::markdown::MarkdownEventCreator {})
+        })?;
+        instance_collector.add_instance("markdown_tag_creator".into(), |_| {
+            Ok(crate::markdown::MarkdownTagCreator {})
+        })?;
+
         instance_collector.add_instance("library_name".into(), |_| Ok(self.library_name))?;
         instance_collector.add_instance("definition_config".into(), |_| Ok(self.def_files))?;
+        instance_collector.document_instance("Removes all duplicate instances of a table using a function to select what to look for. Returns a new table with the duplicates removed");
+        instance_collector.document_instance("```teal_lua");
+        instance_collector.document_instance("local with_dupes = {1,2,3,3,2,1}");
+        instance_collector.document_instance(
+            "local without_duplicates = dedupe_by(with_dupes,function(x:integer):integer return x end)",
+        );
+        instance_collector.document_instance("print(#without_duplicates, #with_dupes)");
+        instance_collector.document_instance("```");
         instance_collector.add_instance("dedupe_by".into(), |lua| {
-            tealr::mlu::TypedFunction::from_rust(
+            TypedFunction::from_rust(
                 |lua,
                  (a, b): (
-                    Vec<tealr::mlu::generics::X>,
-                    tealr::mlu::TypedFunction<tealr::mlu::generics::X, tealr::mlu::generics::Y>,
+                    Vec<mlu::generics::X>,
+                    TypedFunction<mlu::generics::X, mlu::generics::Y>,
                 )| {
                     let table = lua.create_table()?;
                     a.into_iter()
@@ -134,8 +164,29 @@ impl ExportInstances for GlobalInstancesDoc {
             )
         })?;
         instance_collector.add_instance("parse_markdown".into(), |lua| {
-            tealr::mlu::TypedFunction::from_rust(
-                |_, markdown: String| Ok(crate::markdown::parse_markdown(&markdown)),
+            TypedFunction::from_rust(
+                |_,
+                 (markdown, func): (
+                    String,
+                    Option<TypedFunction<MarkdownEvent, MarkdownTransformation>>,
+                )| match func {
+                    Some(x) => crate::markdown::parse_markdown_lua(
+                        markdown,
+                        |event| -> Result<Vec<MarkdownEvent>, mlu::mlua::Error> {
+                            let z = x.call(event)?;
+                            match z {
+                                MarkdownTransformation::MarkdownEventTable(x) => Ok(x),
+                                MarkdownTransformation::OptionalMarkdownEvent(Some(x)) => {
+                                    Ok(vec![x])
+                                }
+                                MarkdownTransformation::OptionalMarkdownEvent(None) => {
+                                    Ok(Default::default())
+                                }
+                            }
+                        },
+                    ),
+                    None => crate::markdown::parse_markdown_lua(markdown, |v| Ok(vec![v])),
+                },
                 lua,
             )
         })?;
@@ -146,7 +197,8 @@ impl ExportInstances for GlobalInstancesDoc {
 pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(), anyhow::Error> {
     let write_path = Path::new(&paths.build_dir).join(&paths.root);
     create_dir_all(&write_path)?;
-    create_d_file(type_defs.clone(), write_path.clone(), &paths.name, &paths)?;
+    let definition_file_storage =
+        create_d_file(type_defs.clone(), write_path.clone(), &paths.name, &paths)?;
     let link_path = Path::new("/").join(&paths.root);
 
     let sidebar: Vec<SideBar> = type_defs
@@ -222,6 +274,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
             &paths.template_kind,
             paths.def_config.templates.clone(),
             paths.name.clone(),
+            definition_file_storage.clone(),
         )?;
     }
     run_and_write(
@@ -234,6 +287,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
         &paths.template_kind,
         paths.def_config.templates,
         paths.name,
+        definition_file_storage,
     )?;
     Ok(())
 }
@@ -254,6 +308,7 @@ fn run_and_write(
     template_kind: &TemplateKind,
     def_config: HashMap<String, DefTemplateConfig>,
     library_name: String,
+    definition_files_storage: PathBuf,
 ) -> Result<(), anyhow::Error> {
     let type_name = if type_should_be_inlined(type_def) {
         "index".into()
@@ -276,7 +331,7 @@ fn run_and_write(
         ),
     };
     let etlua = include_str!("../etlua.lua").to_string();
-    let lua = unsafe { tealr::mlu::mlua::Lua::unsafe_new() };
+    let lua = unsafe { mlu::mlua::Lua::unsafe_new() };
     let instance_setter = GlobalInstancesDoc {
         side_bar: sidebar,
         link_path,
@@ -288,10 +343,11 @@ fn run_and_write(
         globals: global_instances,
         def_files: def_config,
         library_name,
+        definition_files_folder: definition_files_storage.to_string_lossy().to_string(),
     };
-    tealr::mlu::set_global_env(instance_setter, &lua)?;
+    mlu::set_global_env(instance_setter, &lua)?;
 
-    let document: tealr::mlu::mlua::String = lua
+    let document: mlu::mlua::String = lua
         .load(&template_runner)
         .set_name("template_runner")?
         .call(())?;
@@ -309,10 +365,10 @@ struct GlobalsDefFile {
     name: String,
 }
 impl ExportInstances for GlobalsDefFile {
-    fn add_instances<'lua, T: tealr::mlu::InstanceCollector<'lua>>(
+    fn add_instances<'lua, T: mlu::InstanceCollector<'lua>>(
         self,
         instance_collector: &mut T,
-    ) -> tealr::mlu::mlua::Result<()> {
+    ) -> mlu::mlua::Result<()> {
         instance_collector.add_instance("module".into(), |_| Ok(self.module))?;
         instance_collector.add_instance("etlua".into(), |lua| {
             lua.load(&self.etlua).set_name("etlua")?.into_function()
@@ -331,7 +387,7 @@ pub(crate) fn create_d_file(
     path: PathBuf,
     name: &str,
     config: &Paths,
-) -> Result<(), anyhow::Error> {
+) -> Result<PathBuf, anyhow::Error> {
     let runner = match &config.def_config.runner {
         crate::app::DefTemplateRunnerKind::Builtin => {
             include_str!("../base_run_template.lua").to_string()
@@ -339,6 +395,7 @@ pub(crate) fn create_d_file(
         crate::app::DefTemplateRunnerKind::Custom(x) => std::fs::read_to_string(&x)
             .with_context(|| format!("Failed loading custom runner: {x}"))?,
     };
+    let page_path = path.join("definitions");
     for config in config.def_config.templates.values() {
         let template = match &config.template {
             crate::app::DefTemplateKind::Teal => {
@@ -347,7 +404,7 @@ pub(crate) fn create_d_file(
             crate::app::DefTemplateKind::Custom(x) => std::fs::read_to_string(&x)
                 .with_context(|| format!("Failed to load custom template: {x}"))?,
         };
-        let lua = unsafe { tealr::mlu::mlua::Lua::unsafe_new() };
+        let lua = unsafe { mlu::mlua::Lua::unsafe_new() };
         let etlua = include_str!("../etlua.lua").to_string();
         let x = GlobalsDefFile {
             etlua,
@@ -356,11 +413,9 @@ pub(crate) fn create_d_file(
             is_global: true,
             name: name.to_string(),
         };
-        tealr::mlu::set_global_env(x, &lua)?;
+        mlu::set_global_env(x, &lua)?;
 
-        let document: tealr::mlu::mlua::String =
-            lua.load(&runner).set_name("template_runner")?.call(())?;
-        let page_path = path.join("definitions");
+        let document: mlu::mlua::String = lua.load(&runner).set_name("template_runner")?.call(())?;
         create_dir_all(&page_path).with_context(|| {
             format!(
                 "Could not create directories needed for:{}.",
@@ -377,10 +432,11 @@ pub(crate) fn create_d_file(
             .with_context(|| format!("Could not write file{}", page_path.to_string_lossy()))?;
     }
 
-    Ok(())
+    Ok(page_path)
 }
 
 pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
+    use crate::markdown::*;
     let x = tealr::TypeWalker::new()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
@@ -396,6 +452,15 @@ pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
         .process_type::<SideBar>()
         .process_type::<DefTemplateConfig>()
         .process_type::<DefTemplateKind>()
+        .process_type::<MarkdownEvent>()
+        .process_type::<MarkdownEventCreator>()
+        .process_type::<MarkdownCodeBlockKind>()
+        .process_type::<MarkdownCodeBlockKindCreator>()
+        .process_type::<MarkdownHeadingLevel>()
+        .process_type::<MarkdownLinkType>()
+        .process_type::<MarkdownTag>()
+        .process_type::<MarkdownTagCreator>()
+        .process_type::<MarkdownAlignment>()
         .document_global_instance::<GlobalInstancesDoc>()?;
     Ok(x)
 }
