@@ -55,7 +55,7 @@ end
                 if not record.should_be_inlined then
     %>
     <% renderTealTypeOf(record.type_name,"record ") %>
-        <%= (record.is_userdata and "userdata") or "" %>
+        <%= (record.is_user_data and "userdata") or "" %>
     <%
                 end
                         render("--"..string.gsub(record.type_doc, "\n", "\n        --"))

@@ -4,7 +4,6 @@ use run_template::{generate_self_def, generate_self_doc};
 use crate::app::get_paths;
 
 mod app;
-mod compile_teal;
 mod credits;
 mod doc_gen;
 mod markdown;

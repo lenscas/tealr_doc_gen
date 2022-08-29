@@ -6,9 +6,93 @@ function render(str)
 end
 
 function render_markdown(markdown)
+    local code_to_compile = nil
+    local transformer = function(toTransform)
+        if toTransform:IsStart() then
+            local start = toTransform:GetStartOrNil()
+            if start:IsCodeBlock() then
+                local block = start:GetCodeBlockOrNil()
+                if block:IsFenced() and block:GetFencedOrNil() == "teal_lua" then
+                    code_to_compile = "local " .. library_name .. " = require(\""..definition_file_folder.."." .. library_name .."\")"
+                    return
+                end
+            end
+        elseif code_to_compile ~= nil and toTransform:IsText() then
+            local text = toTransform:GetTextOrNil()
+            code_to_compile = code_to_compile .. '\n'.. text
+            return
+        elseif code_to_compile ~= nil and toTransform:IsEnd() then
+            local blockEnd = toTransform:GetEndOrNil()
+            if blockEnd:IsCodeBlock() then
+                local codeBlock = blockEnd:GetCodeBlockOrNil()
+                if codeBlock:IsFenced() and codeBlock:GetFencedOrNil() == "teal_lua" then
+                    local tl = require("tl")
+                    local env = tl.init_env(false,false,true)
+                    local output,result = tl.gen(code_to_compile,env)
+                    if #result.syntax_errors > 0 then
+                        print("Syntax errors found at code:")
+                        print(code_to_compile)
+                        print("Errors:")
+                        for k,v in ipairs(result.syntax_errors) do
+                            print("Syntax error found at:" .. v.msg .. ' x=' .. tostring(v.x) .. ' y=' ..tostring(v.y))
+                        end
+                    end
+                    if #result.type_errors > 0 then
+                        print("Type errors found at code:")
+                        print(code_to_compile)
+                        print("Errors:")
+                        for k,v in ipairs(result.type_errors) do
+                            print("Type error found at:" .. v.msg .. ' x=' .. tostring(v.x) .. ' y=' ..tostring(v.y))
+                        end
+                    end
+                    local teal_code = code_to_compile
+                    code_to_compile = nil
+                    return {
+                        markdown_event_creator.NewHtmlFrom(
+                            [[
+                                <div class="tabs">
+                                    <ul>
+                                        <li class="select-teal"><a>Teal</a></li>
+                                        <li class="select-lua"><a>Lua</a></li>
+                                    </ul>
+                                </div>
+                            ]]
+                        ),
+                        markdown_event_creator.NewHtmlFrom("<div class=\"code-block-teal\">"),
+                        markdown_event_creator.NewStartFrom(
+                            markdown_tag_creator.NewCodeBlockFrom(
+                                markdown_codeblock_kind_creator.NewFencedFrom("lua")
+                            )
+                        ),
+                        markdown_event_creator.NewTextFrom(teal_code),
+                        markdown_event_creator.NewEndFrom(
+                            markdown_tag_creator.NewCodeBlockFrom(
+                                markdown_codeblock_kind_creator.NewFencedFrom("lua")
+                            )
+                        ),
+                        markdown_event_creator.NewHtmlFrom("</div>"),
+                        markdown_event_creator.NewHtmlFrom("<div class=\"code-block-lua\">"),
+                        markdown_event_creator.NewStartFrom(
+                            markdown_tag_creator.NewCodeBlockFrom(
+                                markdown_codeblock_kind_creator.NewFencedFrom("lua")
+                            )
+                        ),
+                        markdown_event_creator.NewTextFrom(output),
+                        markdown_event_creator.NewEndFrom(
+                            markdown_tag_creator.NewCodeBlockFrom(
+                                markdown_codeblock_kind_creator.NewFencedFrom("lua")
+                            )
+                        ),
+                        markdown_event_creator.NewHtmlFrom("</div>")
+                    }
+                end
+            end
+        end
+        return toTransform
+    end
 %>
     <div class="container">
-        <%- parse_markdown(markdown) %>
+        <%- parse_markdown(markdown, transformer) %>
     </div>
 <%
 end
@@ -36,7 +120,7 @@ function renderTealTypeOf(type_parts)
             render(name)
         else
             name = v:GetTypeOrNil()
-            if name.type_kind == "Builtin" then
+            if name.type_kind == "Builtin" or name.type_kind == "Generic" then
                 render(name.name)
             else
 %>
@@ -260,9 +344,20 @@ end
                                                         <div class="card block">
                                                             <div id="<%= global_instance.name %>" class="card-heading">
                                                                 <code class="card-header-title">
-                                                                    <p>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </p>
+                                                                    <h3>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </h3>
                                                                 </code>
                                                             </div>
+                                                    <%
+                                                                if global_instance.doc then
+                                                    %>
+                                                                    <div class="card-content content">
+                                                    <%     
+                                                                        render_markdown(global_instance.doc)
+                                                    %>
+                                                                    </div>
+                                                    <%
+                                                                end
+                                                    %>
                                                         </div>
                                                     <% end %>
                                                 </div>
