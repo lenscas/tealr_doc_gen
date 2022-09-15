@@ -5,15 +5,24 @@ function render(str)
 <%
 end
 
+function is_string_starting_with(str,start)
+   return string.sub(str,1,string.len(start))==start
+end
+
 function render_markdown(markdown)
     local code_to_compile = nil
+    local skip_rust_example = false
     local transformer = function(toTransform)
         if toTransform:IsStart() then
             local start = toTransform:GetStartOrNil()
             if start:IsCodeBlock() then
                 local block = start:GetCodeBlockOrNil()
-                if block:IsFenced() and block:GetFencedOrNil() == "teal_lua" then
+                local fence = block:GetFencedOrNil() --or ""
+                if fence == "teal_lua" then
                     code_to_compile = "local " .. library_name .. " = require(\""..definition_file_folder.."." .. library_name .."\")"
+                    return
+                elseif is_string_starting_with(fence, "rs") or is_string_starting_with(fence,"rust") then
+                    skip_rust_example = true
                     return
                 end
             end
@@ -21,6 +30,18 @@ function render_markdown(markdown)
             local text = toTransform:GetTextOrNil()
             code_to_compile = code_to_compile .. '\n'.. text
             return
+        elseif skip_rust_example and toTransform:IsText() then
+            return
+        elseif skip_rust_example and toTransform:IsEnd() then
+            local blockEnd = toTransform:GetEndOrNil()
+            if blockEnd:IsCodeBlock() then
+                local codeBlock = blockEnd:GetCodeBlockOrNil()
+                local fence = codeBlock:GetFencedOrNil() --or ""
+                if is_string_starting_with(fence, "rs") or is_string_starting_with(fence,"rust")  then
+                    skip_rust_example = false
+                    return
+                end
+            end
         elseif code_to_compile ~= nil and toTransform:IsEnd() then
             local blockEnd = toTransform:GetEndOrNil()
             if blockEnd:IsCodeBlock() then
@@ -314,6 +335,14 @@ end
                                     local enum = type_members:GetEnumOrNil()
                                     if enum then
                                 %>
+                                         <div class="panel block">
+                                            <div class="panel-heading">
+                                                <p class="subtitle">Type doc:</p>
+                                            </div>
+                                            <div class="panel-block">
+                                                <% render_markdown(enum.type_doc or "") %>
+                                            </div>
+                                        </div>
                                         <div class="panel block">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Variants</p>
