@@ -32,6 +32,7 @@ pub enum DefTemplateRunnerKind {
     tealr::mlu::FromToLua,
     TypeName,
 )]
+/// Template used to generate a definition file
 pub enum DefTemplateKind {
     Teal,
     Custom(String),
@@ -47,8 +48,13 @@ pub enum DefTemplateKind {
     tealr::mlu::FromToLua,
     TypeName,
 )]
+/// The configuration for the definition files that get generated.
+///
+/// Contain the information needed to link to them
 pub struct DefTemplateConfig {
+    /// File extension used
     pub(crate) extension: String,
+    /// template used
     pub(crate) template: DefTemplateKind,
 }
 

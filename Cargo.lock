@@ -703,7 +703,7 @@ dependencies = [
 [[package]]
 name = "tealr"
 version = "0.9.0-alpha1"
-source = "git+https://github.com/lenscas/tealr#d1c7b0b13029ba70e9a0e1a9de1d9df56a618731"
+source = "git+https://github.com/lenscas/tealr#8b8f414e2298561252aa370c3c1741ad0566a9f2"
 dependencies = [
  "bstr",
  "itertools",
@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "tealr_derive"
 version = "0.9.0-alpha1"
-source = "git+https://github.com/lenscas/tealr#d1c7b0b13029ba70e9a0e1a9de1d9df56a618731"
+source = "git+https://github.com/lenscas/tealr#8b8f414e2298561252aa370c3c1741ad0566a9f2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -909,9 +909,9 @@ dependencies = [
 
 [[package]]
 name = "venial"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "927ebbcb62b34a3062e3ee01d9518c8306c23d4920f083a1dd75c1190acc7155"
+checksum = "f3d723d4b0ebf523971bc63776095798272df2873910f16d53bb680aa2f4d609"
 dependencies = [
  "proc-macro2",
  "quote",

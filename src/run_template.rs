@@ -18,13 +18,19 @@ use crate::{
 };
 
 #[derive(FromToLua, TypeName, Clone)]
+/// An element in the sidebar
 struct SideBar {
+    /// What url to link to
     link_to: String,
+    /// Name of the type in the sidebar
     name: String,
+    /// The members of the type
     members: Vec<Members>,
 }
 #[derive(FromToLua, TypeName, Clone)]
+/// A member as shown in the sidebar
 struct Members {
+    /// The name of the member
     name: NameContainer,
 }
 
@@ -32,11 +38,15 @@ struct Members {
 struct TestDocs;
 impl TealData for TestDocs {
     fn add_methods<'lua, T: mlu::TealDataMethods<'lua, Self>>(methods: &mut T) {
+        methods.document("```rs");
+        methods.document("This should not be visible");
+        methods.document("```");
         methods.document("```teal_lua");
         methods.document("local a:number = 1");
         methods.document("```");
         methods.document("some documentation for the next method");
         methods.add_method("test", |_, _, ()| Ok(1));
+
         methods.document_type("some documentation for the entire type");
     }
 
@@ -68,6 +78,7 @@ impl Default for GlobalInstancesDoc {
             type_members: TypeGenerator::Enum(EnumGenerator {
                 name: Default::default(),
                 variants: Default::default(),
+                type_doc: Default::default(),
             }),
             type_name: Default::default(),
             all_types: Default::default(),
@@ -99,37 +110,36 @@ impl ExportInstances for GlobalInstancesDoc {
         let globals = self.globals;
         let definition_files_folder = self.definition_files_folder;
 
-        instance_collector.add_instance("side_bar_types".into(), move |_| Ok(side_bar))?;
-        instance_collector.add_instance("etlua".into(), move |lua| {
+        instance_collector.add_instance("side_bar_types", move |_| Ok(side_bar))?;
+        instance_collector.add_instance("etlua", move |lua| {
             lua.load(&etlua).set_name("etlua")?.into_function()
         })?;
-        instance_collector.add_instance("template".into(), move |_| Ok(template))?;
-        instance_collector.add_instance("type_name".into(), move |_| Ok(type_name))?;
-        instance_collector.add_instance("type_members".into(), move |_| Ok(type_members))?;
-        instance_collector.add_instance("globals".into(), move |_| Ok(globals))?;
-        instance_collector.add_instance("all_types".into(), move |_| Ok(all_types))?;
-        instance_collector.add_instance("create_link".into(), move |lua| {
+        instance_collector.add_instance("template", move |_| Ok(template))?;
+        instance_collector.add_instance("type_name", move |_| Ok(type_name))?;
+        instance_collector.add_instance("type_members", move |_| Ok(type_members))?;
+        instance_collector.add_instance("globals", move |_| Ok(globals))?;
+        instance_collector.add_instance("all_types", move |_| Ok(all_types))?;
+        instance_collector.add_instance("create_link", move |lua| {
             let link = link_path;
             TypedFunction::from_rust(
                 move |_, name: String| Ok(link.join(name + ".html").to_string_lossy().to_string()),
                 lua,
             )
         })?;
-        instance_collector.add_instance("definition_file_folder".into(), |_| {
-            Ok(definition_files_folder)
-        })?;
-        instance_collector.add_instance("markdown_codeblock_kind_creator".into(), |_| {
+        instance_collector
+            .add_instance("definition_file_folder", |_| Ok(definition_files_folder))?;
+        instance_collector.add_instance("markdown_codeblock_kind_creator", |_| {
             Ok(crate::markdown::MarkdownCodeBlockKindCreator {})
         })?;
-        instance_collector.add_instance("markdown_event_creator".into(), |_| {
+        instance_collector.add_instance("markdown_event_creator", |_| {
             Ok(crate::markdown::MarkdownEventCreator {})
         })?;
-        instance_collector.add_instance("markdown_tag_creator".into(), |_| {
+        instance_collector.add_instance("markdown_tag_creator", |_| {
             Ok(crate::markdown::MarkdownTagCreator {})
         })?;
 
-        instance_collector.add_instance("library_name".into(), |_| Ok(self.library_name))?;
-        instance_collector.add_instance("definition_config".into(), |_| Ok(self.def_files))?;
+        instance_collector.add_instance("library_name", |_| Ok(self.library_name))?;
+        instance_collector.add_instance("definition_config", |_| Ok(self.def_files))?;
         instance_collector.document_instance("Removes all duplicate instances of a table using a function to select what to look for. Returns a new table with the duplicates removed");
         instance_collector.document_instance("```teal_lua");
         instance_collector.document_instance("local with_dupes = {1,2,3,3,2,1}");
@@ -138,7 +148,7 @@ impl ExportInstances for GlobalInstancesDoc {
         );
         instance_collector.document_instance("print(#without_duplicates, #with_dupes)");
         instance_collector.document_instance("```");
-        instance_collector.add_instance("dedupe_by".into(), |lua| {
+        instance_collector.add_instance("dedupe_by", |lua| {
             TypedFunction::from_rust(
                 |lua,
                  (a, b): (
@@ -163,7 +173,7 @@ impl ExportInstances for GlobalInstancesDoc {
                 lua,
             )
         })?;
-        instance_collector.add_instance("parse_markdown".into(), |lua| {
+        instance_collector.add_instance("parse_markdown", |lua| {
             TypedFunction::from_rust(
                 |_,
                  (markdown, func): (
@@ -369,15 +379,21 @@ impl ExportInstances for GlobalsDefFile {
         self,
         instance_collector: &mut T,
     ) -> mlu::mlua::Result<()> {
-        instance_collector.add_instance("module".into(), |_| Ok(self.module))?;
-        instance_collector.add_instance("etlua".into(), |lua| {
+        instance_collector.document_instance("Type and documentation of this module");
+        instance_collector.add_instance("module", |_| Ok(self.module))?;
+        instance_collector.document_instance("function to load etlua");
+        instance_collector.add_instance("etlua", |lua| {
             lua.load(&self.etlua).set_name("etlua")?.into_function()
         })?;
-        instance_collector.add_instance("global_or_local".into(), |_| {
+        instance_collector
+            .document_instance("Wether it is a local or global record that wraps the module");
+        instance_collector.add_instance("global_or_local", |_| {
             Ok(if self.is_global { "global" } else { "local" })
         })?;
-        instance_collector.add_instance("template".into(), |_| Ok(self.template))?;
-        instance_collector.add_instance("name".into(), |_| Ok(self.name))?;
+        instance_collector.document_instance("template that gets loaded");
+        instance_collector.add_instance("template", |_| Ok(self.template))?;
+        instance_collector.document_instance("name of the module");
+        instance_collector.add_instance("name", |_| Ok(self.name))?;
         Ok(())
     }
 }
