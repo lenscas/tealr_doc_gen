@@ -304,7 +304,38 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
 
 pub(crate) fn run_template(paths: Paths) -> Result<(), anyhow::Error> {
     let json = read_to_string(&paths.json)?;
-    let type_defs: tealr::TypeWalker = serde_json::from_str(&json)?;
+    let value = serde_json::from_str::<serde_json::Value>(&json)?;
+    let type_defs: tealr::TypeWalker = match serde_json::from_value::<TypeWalker>(value.clone()) {
+        Ok(x) => {
+            if !x.check_correct_version() {
+                println!("Warning:");
+                println!("Tealr version used to create this json is not equal to the tealr version used to build this version of tealr_doc_gen");
+                println!("Tealr version used: {}", x.get_tealr_version_used());
+                println!("built version used: {}", tealr::get_tealr_version());
+                println!("Please update both tealr and tealr_doc_gen so the versions match.");
+                println!("Schema seems compatible. Trying anyway");
+            }
+            x
+        }
+        Err(x) => match x.classify() {
+            serde_json::error::Category::Data => {
+                match value.get::<String>("tealr_version_used".into()) {
+                    Some(serde_json::Value::String(y)) => {
+                        if y != tealr::get_tealr_version() {
+                            return Err(x).context(format!("Tealr version used to create the json is not compatible with this version of tealr_doc_gen.\nTealr version used: {y}\nCompatible tealr_version: {}.\nSchema error:", tealr::get_tealr_version()));
+                        } else {
+                            return Err(x.into());
+                        }
+                    }
+                    Some(_) | None => {
+                        return Err(x).context("Json is not the correct schema.\nCould not get the tealr version used to create the json.\nError in schema:");
+                    }
+                }
+            }
+            _ => return Err(x.into()),
+        },
+    };
+
     run_from_walker(paths, type_defs)
 }
 

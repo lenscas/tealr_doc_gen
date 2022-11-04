@@ -1,7 +1,10 @@
 use pulldown_cmark::{
     html, Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag,
 };
-use tealr::{mlu::FromToLua, TypeName};
+use tealr::{
+    mlu::{mlua::FromLua, FromToLua},
+    TypeName,
+};
 
 #[derive(Clone, TypeName, FromToLua)]
 ///What kind of codeblock it is
@@ -258,6 +261,15 @@ pub enum MarkdownEvent {
     HardBreak,
     Rule,
     TaskListMarker(bool),
+}
+
+impl<'lua> tealr::mlu::FromLuaExact<'lua> for MarkdownEvent {
+    fn from_lua_exact(
+        value: tealr::mlu::mlua::Value<'lua>,
+        lua: &'lua tealr::mlu::mlua::Lua,
+    ) -> tealr::mlu::mlua::Result<Self> {
+        MarkdownEvent::from_lua(value, lua)
+    }
 }
 
 impl<'a> From<Event<'a>> for MarkdownEvent {
