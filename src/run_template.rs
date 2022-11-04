@@ -439,7 +439,7 @@ pub(crate) fn create_d_file(
         crate::app::DefTemplateRunnerKind::Builtin => {
             include_str!("../base_run_template.lua").to_string()
         }
-        crate::app::DefTemplateRunnerKind::Custom(x) => std::fs::read_to_string(&x)
+        crate::app::DefTemplateRunnerKind::Custom(x) => std::fs::read_to_string(x)
             .with_context(|| format!("Failed loading custom runner: {x}"))?,
     };
     let page_path = path.join("definitions");
@@ -448,7 +448,7 @@ pub(crate) fn create_d_file(
             crate::app::DefTemplateKind::Teal => {
                 include_str!("../base_teal_definition_template.etlua").to_string()
             }
-            crate::app::DefTemplateKind::Custom(x) => std::fs::read_to_string(&x)
+            crate::app::DefTemplateKind::Custom(x) => std::fs::read_to_string(x)
                 .with_context(|| format!("Failed to load custom template: {x}"))?,
         };
         let lua = unsafe { mlu::mlua::Lua::unsafe_new() };
