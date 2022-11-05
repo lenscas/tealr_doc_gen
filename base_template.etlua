@@ -1,8 +1,6 @@
 <%
 function render(str)
-%>
-    <%= str -%>
-<%
+%><%=str-%><%
 end
 
 function is_string_starting_with(str,start)
@@ -179,7 +177,7 @@ function render_record_part(header_name, record, parts)
     end
 
 %>
-    <div class="panel block">
+    <div class="panel max-width">
         <div class="panel-heading">
             <p class="subtitle"><%=header_name-%>:</p>
         </div>
@@ -194,6 +192,14 @@ function render_record_part(header_name, record, parts)
         </div>
     </div>
 <%
+end
+
+function render_definition_files()
+    for k,v in pairs(definition_config) do 
+%>
+        <a class="navbar-item" href="definitions/<%=  library_name .. v.extension %>"><%=k%></a>
+<% 
+    end
 end
 %>
 
@@ -230,11 +236,8 @@ end
         .footer {
             margin-top: -12px;
         }
-
-        @media screen and (max-width: 768px) {
-            #menu-toggle:checked+.nav-menu {
-                display: block;
-            }
+        .hideable-state:checked+.hideable-content {
+            display: block !important;
         }
 
         .sticky-sidebar {
@@ -243,22 +246,38 @@ end
             top: 0;
             overflow: auto;
         }
+        .max-width {
+            max-width:100%;
+        }
+        .hidden-themes-selector {
+            display:none;
+        }
     </style>
 </head>
 
 <body>
     <div id="app">
         <nav class="navbar has-shadow">
-            <div class="navbar-menu">
+            <div class="navbar-brand">
+                <div class="navbar-item is-hidden-desktop">
+                    <label for="menu-toggle" role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+                        <span aria-hidden="true"></span>
+                        <span aria-hidden="true"></span>
+                        <span aria-hidden="true"></span>
+                    </label>
+                    
+                </div>
+            </div>
+            <div class="navbar-menu" id="navbar-id">
                 <div class="navbar-start">
                     <div class="navbar-item has-dropdown is-hoverable">
-                        <a class="navbar-link">
+                        <a class="navbar-link hidden-themes-selector">
                             Themes
                         </a>
                         <div class="navbar-dropdown is-boxed">
                             <div class="columns">
-                                <div class="collumn" id="theme-select-column1"></div>
-                                <div class="collumn" id="theme-select-column2"></div>
+                                <div class="collumn theme-select-column1"></div>
+                                <div class="collumn theme-select-column2"></div>
                             </div>
                         </div>
                     </div>
@@ -267,17 +286,54 @@ end
                             Definition files
                         </a>
                         <div class="navbar-dropdown is-boxed">
-                            <% for k,v in pairs(definition_config) do %>
-                                <a class="navbar-item" href="definitions/<%=  library_name .. v.extension %>"><%=k%></a>
-                            <% end %>
+                        <%
+                            render_definition_files()
+                        %>
                         </div>
                     </div>
                 </div>
             </div>
         </nav>
-
         <section class="main-content columns is-fullheight">
-            <aside class="column is-2 is-narrow-mobile is-fullheight section is-hidden-mobile sticky-sidebar">
+            <input type="checkbox" id="menu-toggle" class="is-hidden hideable-state"/>
+            <aside id="sidebar" class="column is-2 is-narrow-mobile is-fullheight section is-hidden-touch sticky-sidebar hideable-content">
+                <div class="is-hidden-desktop">
+                    <div class="dropdown is-hoverable">
+                        <div class="dropdown-trigger">
+                            <label for="theme-toggle" class="button hidden-themes-selector" aria-haspopup="true" aria-controls="dropdown-menu4">
+                                <span>Themes</span>
+                                <span class="icon is-small">
+                                    <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                </span>
+                            </label>
+                        </div>
+                        <input type="checkbox" id="theme-toggle" class="is-hidden hideable-state"/>
+                        <div class="dropdown-menu hideable-content" id="dropdown-menu4" role="menu">
+                            <div class="dropdown-content">
+                                <div class="columns">
+                                    <div class="collumn theme-select-column1"></div>
+                                    <div class="collumn theme-select-column2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dropdown is-hoverable">
+                        <div class="dropdown-trigger">
+                            <label for="definition-files-toggle" class="button" aria-haspopup="true" aria-controls="dropdown-menu5">
+                                <span>Def files</span>
+                                <span class="icon is-small">
+                                    <i class="fa fa-angle-down" aria-hidden="true"></i>
+                                </span>
+                            </label>
+                        </div>
+                        <input type="checkbox" id="definition-files-toggle" class="is-hidden hideable-state"/>
+                        <div class="dropdown-menu hideable-content" id="dropdown-menu5" role="menu">
+                            <div class="dropdown-content">
+                                <% render_definition_files() %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <p class="menu-label is-hidden-touch">Navigation</p>
                 <ul class="menu-list">
                     <% for i, side_bar_type in pairs(side_bar_types) do %>
@@ -307,12 +363,12 @@ end
                             <h1 class="title"><%= type_name -%></h1>
                         </div>
                         <div class="panel-block">
-                            <div class="container">
+                            <div class="container max-width">
                                 <%
                                     local record = type_members:GetRecordOrNil() 
                                     if record then
                                 %>
-                                        <div class="panel block">
+                                        <div class="panel max-width">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Type doc:</p>
                                             </div>
@@ -335,7 +391,7 @@ end
                                     local enum = type_members:GetEnumOrNil()
                                     if enum then
                                 %>
-                                         <div class="panel block">
+                                         <div class="panel max-width">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Type doc:</p>
                                             </div>
@@ -343,12 +399,12 @@ end
                                                 <% render_markdown(enum.type_doc or "") %>
                                             </div>
                                         </div>
-                                        <div class="panel block">
+                                        <div class="panel max-width">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Variants</p>
                                             </div>
                                             <div class="panel-block">
-                                                <div class="container">
+                                                <div class="container max-width">
                                                     <% for _, variant in ipairs(enum.variants) do %>
                                                         <div class="card block">
                                                             <div id="<%= variant %>" class="card-heading">
@@ -363,12 +419,12 @@ end
                                     end
                                     if globals then
                                 %>
-                                        <div class="panel block">
+                                        <div class="panel max-width">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Globals:</p>
                                             </div>
                                             <div class="panel-block">
-                                                <div class="container">
+                                                <div class="container max-width">
                                                     <% for _, global_instance in ipairs(globals) do %>
                                                         <div class="card block">
                                                             <div id="<%= global_instance.name %>" class="card-heading">
@@ -396,12 +452,12 @@ end
                                     end
                                         if all_types then
                                 %>
-                                        <div class="panel block">
+                                        <div class="panel max-width">
                                             <div class="panel-heading">
                                                 <p class="subtitle">Types:</p>
                                             </div>
                                             <div class="panel-block">
-                                                <div class="container">
+                                                <div class="container max-width">
                                                     <% 
                                                         for _, teal_type in ipairs(all_types) do 
                                                             local record = teal_type:GetRecordOrNil()
@@ -435,6 +491,7 @@ end
         </section>
     </div>
     <script>
+        document.querySelectorAll(".hidden-themes-selector").forEach(x=>x.classList.remove("hidden-themes-selector"))
         const bulmaTheme = document.getElementById("bulma-theme")
         const isDarkTheme = {
             "Cerulean": false,
@@ -494,8 +551,8 @@ crossorigin="anonymous" referrerpolicy="no-referrer" />`
             .then(x => {
 
                 const max = x.themes.length / 2
-                const col1 = document.getElementById("theme-select-column1")
-                const col2 = document.getElementById("theme-select-column2")
+                const col1 = document.querySelectorAll(".theme-select-column1")
+                const col2 = document.querySelectorAll(".theme-select-column2")
                 x.themes.forEach((z, k) => {
                     const a = document.createElement("a")
                     a.onclick = () => {
@@ -510,9 +567,9 @@ crossorigin="anonymous" referrerpolicy="no-referrer" />`
                     div.classList.add("navbar-item")
                     div.appendChild(a)
                     if (k < max) {
-                        col1.appendChild(div)
+                        col1.forEach(x=>x.appendChild(div.cloneNode(true)))
                     } else {
-                        col2.appendChild(div)
+                        col2.forEach(x=>x.appendChild(div.cloneNode(true)))
                     }
                 })
             })

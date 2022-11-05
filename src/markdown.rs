@@ -329,7 +329,7 @@ pub(crate) fn parse_markdown_lua(
             y.as_deref(),
             z.iter().map(|x| x.as_str()).collect(),
         )),
-        MarkdownEvent::End(MarkdownTag::Heading(x, y, z)) => Event::Start(Tag::Heading(
+        MarkdownEvent::End(MarkdownTag::Heading(x, y, z)) => Event::End(Tag::Heading(
             (*x).into(),
             y.as_deref(),
             z.iter().map(|x| x.as_str()).collect(),
