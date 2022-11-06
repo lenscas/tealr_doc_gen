@@ -1,6 +1,6 @@
 # tealr_doc_gen
 
-This tool is meant to be used together with [tealr](https://github.com/lenscas/tealr/tree/master/tealr) and is used to generate online documentation for lua/teal apis created with [tealr](https://github.com/lenscas/tealr/tree/master/tealr)
+This tool is meant to be used together with [tealr](https://github.com/lenscas/tealr) and is used to generate online documentation for lua/teal apis created with [tealr](https://github.com/lenscas/tealr/tree)
 
 ## Rendered Example 
 https://lenscas.github.io/tealsql/
