@@ -1,4 +1,68 @@
 <%
+
+function split_used_by(users)
+    local as_params = {}
+    local as_returns = {}
+    local as_fields = {}
+    for key, user in ipairs(users) do
+        if #user.as_params > 0 then
+            table.insert(as_params, {
+                type_name=user.type_name,
+                as_params=user.as_params
+            })
+        end
+        if #user.as_return > 0 then
+            table.insert(as_returns, {
+                type_name=user.type_name,
+                as_returns=user.as_return
+            })
+        end
+        if #user.as_fields > 0 then
+            table.insert(as_fields, {
+                type_name=user.type_name,
+                as_fields=user.as_fields
+            })
+        end
+    end
+    return as_params,as_returns,as_fields
+end
+
+function render_used_by(users)
+    local as_params,as_returns,as_fields = split_used_by(users)
+    local function render(to_render, name, field_name)
+        if #to_render > 0 then
+%>
+            <h3 class="is-size-5">name<h3>
+            <ul>
+<%
+                for _k, used_in_type in ipairs(to_render) do
+                    for _k, used_by in ipairs(used_in_type[field_name]) do
+%> 
+                        <li>
+                            <a href="<%=create_link(used_in_type.type_name) .. "#"..used_by%>"><%=used_in_type.type_name.."."..used_by%></a>
+                        </li>
+<% 
+                    end
+                end
+%>
+            </ul>
+<%
+        end
+    end
+%>
+    <div class="panel max-width">
+        <input type="checkbox" id="type-uses" class="is-hidden hideable-state"/>
+        <div class="panel-block is-hidden hideable-content">
+<%
+            render(as_params,"As Parameter:","as_params")
+            render(as_returns,"Returned by:","as_returns")
+            render(as_fields,"As field:","as_fields")
+%>
+        </div>
+    </div>
+<%
+end
+
 function render(str)
 %><%=str-%><%
 end
@@ -360,11 +424,21 @@ end
                 <div class="section">
                     <div class="panel">
                         <div class="panel-heading">
-                            <h1 class="title"><%= type_name -%></h1>
+                            <h1 class="title">
+                                <%= type_name -%>
+                                <%
+                                    if not all_types then
+                                %>
+                                        <label style="float:right" for="type-uses" class="button">Uses</label>
+                                <%
+                                    end
+                                %>
+                            </h1>
                         </div>
                         <div class="panel-block">
                             <div class="container max-width">
                                 <%
+                                    render_used_by(used_by)
                                     local record = type_members:GetRecordOrNil() 
                                     if record then
                                 %>
