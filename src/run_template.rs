@@ -67,6 +67,7 @@ struct GlobalInstancesDoc {
     def_files: HashMap<String, DefTemplateConfig>,
     library_name: String,
     definition_files_folder: String,
+    users: Vec<crate::find_uses::User>,
 }
 impl Default for GlobalInstancesDoc {
     fn default() -> Self {
@@ -86,6 +87,7 @@ impl Default for GlobalInstancesDoc {
             def_files: Default::default(),
             library_name: Default::default(),
             definition_files_folder: Default::default(),
+            users: Default::default(),
         }
     }
 }
@@ -140,6 +142,12 @@ impl ExportInstances for GlobalInstancesDoc {
 
         instance_collector.add_instance("library_name", |_| Ok(self.library_name))?;
         instance_collector.add_instance("definition_config", |_| Ok(self.def_files))?;
+        instance_collector.document_instance(
+            "defines what types make use of the current type and how they use it",
+        );
+
+        instance_collector.add_instance("used_by", |_| Ok(self.users))?;
+
         instance_collector.document_instance("Removes all duplicate instances of a table using a function to select what to look for. Returns a new table with the duplicates removed");
         instance_collector.document_instance("```teal_lua");
         instance_collector.document_instance("local with_dupes = {1,2,3,3,2,1}");
@@ -253,6 +261,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
         .collect();
     let mut z = RecordGenerator::new::<RecordGenerator>(true);
     for type_def in type_defs.iter() {
+        let users = crate::find_uses::find_users(type_def, &type_defs);
         match type_def {
             TypeGenerator::Record(x) => {
                 let x = x.to_owned();
@@ -285,6 +294,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
             paths.def_config.templates.clone(),
             paths.name.clone(),
             definition_file_storage.clone(),
+            users,
         )?;
     }
     run_and_write(
@@ -298,6 +308,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
         paths.def_config.templates,
         paths.name,
         definition_file_storage,
+        Vec::new(),
     )?;
     Ok(())
 }
@@ -350,6 +361,7 @@ fn run_and_write(
     def_config: HashMap<String, DefTemplateConfig>,
     library_name: String,
     definition_files_storage: PathBuf,
+    users: Vec<crate::find_uses::User>,
 ) -> Result<(), anyhow::Error> {
     let type_name = if type_should_be_inlined(type_def) {
         "index".into()
@@ -385,6 +397,7 @@ fn run_and_write(
         def_files: def_config,
         library_name,
         definition_files_folder: definition_files_storage.to_string_lossy().to_string(),
+        users,
     };
     mlu::set_global_env(instance_setter, &lua)?;
 
@@ -508,6 +521,7 @@ pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
         .process_type::<MarkdownTag>()
         .process_type::<MarkdownTagCreator>()
         .process_type::<MarkdownAlignment>()
+        .process_type::<crate::find_uses::User>()
         .document_global_instance::<GlobalInstancesDoc>()?;
     Ok(x)
 }

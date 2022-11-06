@@ -6,6 +6,7 @@ use crate::app::get_paths;
 mod app;
 mod credits;
 mod doc_gen;
+mod find_uses;
 mod markdown;
 mod run_template;
 fn main() -> anyhow::Result<()> {
