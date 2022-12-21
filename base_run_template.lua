@@ -12,7 +12,8 @@ function inspect_type(name, tbl)
             end
         end
     else
-        print(name, " is ", k, "of", typeOf, "containing", tbl)
+        local typeOf = type(tbl)
+        print(name, " is a", type(tbl), "containing", tbl)
     end
 end
 

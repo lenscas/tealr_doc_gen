@@ -32,7 +32,7 @@ function render_used_by(users)
     local function render(to_render, name, field_name)
         if #to_render > 0 then
 %>
-            <h3 class="is-size-5">name<h3>
+            <h3 class="is-size-5"><%=name%><h3>
             <ul>
 <%
                 for _k, used_in_type in ipairs(to_render) do
@@ -71,15 +71,24 @@ function is_string_starting_with(str,start)
    return string.sub(str,1,string.len(start))==start
 end
 
+function get_string_from(str,from)
+    return string.sub(str,from,string.len(str))
+end
+
+local function headingToSize(heading) 
+    return "is-" .. get_string_from(heading, 1)
+end
+
 function render_markdown(markdown)
     local code_to_compile = nil
     local skip_rust_example = false
+
     local transformer = function(toTransform)
         if toTransform:IsStart() then
             local start = toTransform:GetStartOrNil()
             if start:IsCodeBlock() then
                 local block = start:GetCodeBlockOrNil()
-                local fence = block:GetFencedOrNil() --or ""
+                local fence = block:GetFencedOrNil()
                 if fence == "teal_lua" then
                     code_to_compile = "local " .. library_name .. " = require(\""..definition_file_folder.."." .. library_name .."\")"
                     return
@@ -87,6 +96,22 @@ function render_markdown(markdown)
                     skip_rust_example = true
                     return
                 end
+            elseif start:IsLink() then
+                local link_type,to,title = start:GetLinkOrNil()
+                if is_string_starting_with(to,"#") then
+                    to = create_link(get_string_from(to,1))
+                elseif not is_string_starting_with(to,"http") then
+                    to = create_link(to)
+                end
+                return markdown_event_creator.NewStartFrom(start.NewLinkFrom(link_type,to,title))
+            elseif start:IsHeading() then
+                local heading_level, fragment, classes = start:GetHeadingOrNil()
+                table.insert(classes,"subtitle")
+                table.insert(classes,headingToSize(heading_level))
+                return markdown_event_creator.NewStartFrom(
+                    markdown_tag_creator.NewHeadingFrom(heading_level,fragment,classes)
+                )
+                
             end
         elseif code_to_compile ~= nil and toTransform:IsText() then
             local text = toTransform:GetTextOrNil()
@@ -180,22 +205,6 @@ function render_markdown(markdown)
 <%
 end
 
-function inspect_type(name,tbl)
-    if type(tbl) == "table" then
-        for k,v in pairs(tbl) do
-            local typeOf = type(v)
-            if typeOf == "table" then
-                print(name, " has ", k, "of", typeOf,"with")
-                inspect_type(name.." - "..k,v)
-            else
-                print(name, " has ", k, "of", typeOf, "containing",v)
-            end
-        end
-    else
-        print(name, " is ", k, "of", typeOf, "containing",tbl)
-    end
-end
-
 function renderTealTypeOf(type_parts)
     for k,v in ipairs(type_parts) do 
         local name = v:GetSymbolOrNil()
@@ -265,6 +274,26 @@ function render_definition_files()
 <% 
     end
 end
+
+
+local page_name
+local type_name
+local type_members
+local used_by
+local t = page:GetTypeOrNil()
+local index = page:GetIndexPageOrNil()
+local custom_page = page:GetCustomPageOrNil()
+if t then
+    type_name = t.type_name
+    type_members = t.type_members
+    used_by = t.used_by
+elseif index then
+    type_name = index.type_name
+    type_members = index.type_members
+elseif custom_page then
+    page_name = custom_page.name
+end
+page_name = page_name or type_name
 %>
 
 <!DOCTYPE html>
@@ -285,7 +314,7 @@ end
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.4.0/highlight.min.js"
         integrity="sha512-IaaKO80nPNs5j+VLxd42eK/7sYuXQmr+fyywCNA0e+C6gtQnuCXNtORe9xR4LqGPz5U9VpH+ff41wKs/ZmC3iA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <title><%= type_name-%></title>
+    <title><%= page_name-%></title>
     <style>
         html,
         body,
@@ -425,9 +454,9 @@ end
                     <div class="panel">
                         <div class="panel-heading">
                             <h1 class="title">
-                                <%= type_name -%>
+                                <%= page_name -%>
                                 <%
-                                    if not all_types then
+                                    if page:IsType() then
                                 %>
                                         <label style="float:right" for="type-uses" class="button">Uses</label>
                                 <%
@@ -438,123 +467,130 @@ end
                         <div class="panel-block">
                             <div class="container max-width">
                                 <%
-                                    render_used_by(used_by)
-                                    local record = type_members:GetRecordOrNil() 
-                                    if record then
+                                    local custom_page = page:GetCustomPageOrNil()
+                                    if custom_page then
+                                        render_markdown(custom_page.markdown_content)
+                                    else
+                                        if page:GetType() then
+                                            render_used_by(used_by)
+                                        end
+                                        local record = type_members:GetRecordOrNil() 
+                                        if record then
                                 %>
-                                        <div class="panel max-width">
-                                            <div class="panel-heading">
-                                                <p class="subtitle">Type doc:</p>
-                                            </div>
-                                            <div class="panel-block">
-                                                <% render_markdown(record.type_doc or "") %>
-                                            </div>
-                                        </div>
-                                <%
-                                        render_record_part("Fields",record,{"fields","static_fields"})
-                                        render_record_part("Methods",record, {
-                                            "methods",
-                                            "mut_methods","functions",
-                                            "mut_functions",
-                                            "meta_method",
-                                            "meta_method_mut",
-                                            "meta_function",
-                                            "meta_function_mut"
-                                        })
-                                    end
-                                    local enum = type_members:GetEnumOrNil()
-                                    if enum then
-                                %>
-                                         <div class="panel max-width">
-                                            <div class="panel-heading">
-                                                <p class="subtitle">Type doc:</p>
-                                            </div>
-                                            <div class="panel-block">
-                                                <% render_markdown(enum.type_doc or "") %>
-                                            </div>
-                                        </div>
-                                        <div class="panel max-width">
-                                            <div class="panel-heading">
-                                                <p class="subtitle">Variants</p>
-                                            </div>
-                                            <div class="panel-block">
-                                                <div class="container max-width">
-                                                    <% for _, variant in ipairs(enum.variants) do %>
-                                                        <div class="card block">
-                                                            <div id="<%= variant %>" class="card-heading">
-                                                                <code class="card-header-title"><p>"<%= variant %>" </p></code>
-                                                            </div>
-                                                        </div>
-                                                    <% end %>
+                                            <div class="panel max-width">
+                                                <div class="panel-heading">
+                                                    <p class="subtitle">Type doc:</p>
+                                                </div>
+                                                <div class="panel-block">
+                                                    <% render_markdown(record.type_doc or "") %>
                                                 </div>
                                             </div>
-                                        </div>
                                 <%
-                                    end
-                                    if globals then
+                                            render_record_part("Fields",record,{"fields","static_fields"})
+                                            render_record_part("Methods",record, {
+                                                "methods",
+                                                "mut_methods","functions",
+                                                "mut_functions",
+                                                "meta_method",
+                                                "meta_method_mut",
+                                                "meta_function",
+                                                "meta_function_mut"
+                                            })
+                                        end
+                                        local enum = type_members:GetEnumOrNil()
+                                        if enum then
                                 %>
-                                        <div class="panel max-width">
-                                            <div class="panel-heading">
-                                                <p class="subtitle">Globals:</p>
-                                            </div>
-                                            <div class="panel-block">
-                                                <div class="container max-width">
-                                                    <% for _, global_instance in ipairs(globals) do %>
-                                                        <div class="card block">
-                                                            <div id="<%= global_instance.name %>" class="card-heading">
-                                                                <code class="card-header-title">
-                                                                    <h3>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </h3>
-                                                                </code>
-                                                            </div>
-                                                    <%
-                                                                if global_instance.doc then
-                                                    %>
-                                                                    <div class="card-content content">
-                                                    <%     
-                                                                        render_markdown(global_instance.doc)
-                                                    %>
-                                                                    </div>
-                                                    <%
-                                                                end
-                                                    %>
-                                                        </div>
-                                                    <% end %>
+                                            <div class="panel max-width">
+                                                <div class="panel-heading">
+                                                    <p class="subtitle">Type doc:</p>
+                                                </div>
+                                                <div class="panel-block">
+                                                    <% render_markdown(enum.type_doc or "") %>
                                                 </div>
                                             </div>
-                                        </div>
-                                <%
-                                    end
-                                        if all_types then
-                                %>
-                                        <div class="panel max-width">
-                                            <div class="panel-heading">
-                                                <p class="subtitle">Types:</p>
-                                            </div>
-                                            <div class="panel-block">
-                                                <div class="container max-width">
-                                                    <% 
-                                                        for _, teal_type in ipairs(all_types) do 
-                                                            local record = teal_type:GetRecordOrNil()
-                                                            if record and not record.should_be_inlined then
-                                                    %>
-                                                                <div class="card block">
-                                                                    <div id="<%= record.type_name %>" class="card-heading">
-                                                                        <code class="card-header-title">
-                                                                            <p><% renderTealTypeOf(record.type_name) %> </p>
-                                                                        </code>
-                                                                    </div>
-                                                                    <div class="card-content content">
-                                                                        <% render_markdown(record.type_doc) %>
-                                                                    </div>
+                                            <div class="panel max-width">
+                                                <div class="panel-heading">
+                                                    <p class="subtitle">Variants</p>
+                                                </div>
+                                                <div class="panel-block">
+                                                    <div class="container max-width">
+                                                        <% for _, variant in ipairs(enum.variants) do %>
+                                                            <div class="card block">
+                                                                <div id="<%= variant %>" class="card-heading">
+                                                                    <code class="card-header-title"><p>"<%= variant %>" </p></code>
                                                                 </div>
-                                                    <% 
-                                                            end
-                                                        end
-                                                    %>
+                                                            </div>
+                                                        <% end %>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
                                 <%
+                                        end
+                                        if index then
+                                %>
+                                            <div class="panel max-width">
+                                                <div class="panel-heading">
+                                                    <p class="subtitle">Globals:</p>
+                                                </div>
+                                                <div class="panel-block">
+                                                    <div class="container max-width">
+                                                        <% for _, global_instance in ipairs(globals) do %>
+                                                            <div class="card block">
+                                                                <div id="<%= global_instance.name %>" class="card-heading">
+                                                                    <code class="card-header-title">
+                                                                        <h3>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </h3>
+                                                                    </code>
+                                                                </div>
+                                                        <%
+                                                                    if global_instance.doc then
+                                                        %>
+                                                                        <div class="card-content content">
+                                                        <%     
+                                                                            render_markdown(global_instance.doc)
+                                                        %>
+                                                                        </div>
+                                                        <%
+                                                                    end
+                                                        %>
+                                                            </div>
+                                                        <% end %>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                <%
+                                        end
+                                            if index then
+                                %>
+                                            <div class="panel max-width">
+                                                <div class="panel-heading">
+                                                    <p class="subtitle">Types:</p>
+                                                </div>
+                                                <div class="panel-block">
+                                                    <div class="container max-width">
+                                                        <% 
+                                                            for _, teal_type in ipairs(all_types) do 
+                                                                local record = teal_type:GetRecordOrNil()
+                                                                if record and not record.should_be_inlined then
+                                                        %>
+                                                                    <div class="card block">
+                                                                        <div id="<%= record.type_name %>" class="card-heading">
+                                                                            <code class="card-header-title">
+                                                                                <p><% renderTealTypeOf(record.type_name) %> </p>
+                                                                            </code>
+                                                                        </div>
+                                                                        <div class="card-content content">
+                                                                            <% render_markdown(record.type_doc) %>
+                                                                        </div>
+                                                                    </div>
+                                                        <% 
+                                                                end
+                                                            end
+                                                        %>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                <%
+                                        end
                                     end
                                 %>
                             </div>
