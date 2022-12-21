@@ -1,9 +1,11 @@
 use tealr::{NameContainer, TypeWalker};
 
-#[derive(tealr::mlu::FromToLua, tealr::TypeName)]
+#[derive(Clone, tealr::mlu::FromToLua, tealr::TypeName)]
 ///Defines how another type uses this type
 pub struct User {
     ///the name of the type that uses this type
+    ///
+    ///abc [ToEnumGenerator](RecordGenerator#meta_method)
     type_name: String,
     ///the name of the methods that use this type as a parameter
     as_params: Vec<NameContainer>,
