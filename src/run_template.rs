@@ -472,7 +472,12 @@ fn run_and_write(
         .call(())
         .context("Failed while running template")?;
     let page_path = write_path.join(file_name);
-    std::fs::write(&page_path, document.as_bytes())
+    let as_bytes = document.as_bytes();
+    let mut minify_cfg = minify_html::Cfg::spec_compliant();
+    minify_cfg.minify_css = true;
+    minify_cfg.minify_js = true;
+    let minified = minify_html::minify(as_bytes, &minify_cfg);
+    std::fs::write(&page_path, &minified)
         .with_context(|| format!("Could not write to {page_path:?}"))?;
     Ok(())
 }
