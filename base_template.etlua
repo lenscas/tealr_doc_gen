@@ -664,22 +664,28 @@ crossorigin="anonymous" referrerpolicy="no-referrer" />`
                 const col1 = document.querySelectorAll(".theme-select-column1")
                 const col2 = document.querySelectorAll(".theme-select-column2")
                 x.themes.forEach((z, k) => {
-                    const a = document.createElement("a")
-                    a.onclick = () => {
-                        setTheme(z.css, z.name)
-                        localStorage.setItem(
-                            "editor_last_selected",
-                            JSON.stringify({ url: z.css, name: z.name })
-                        );
+                    const createThemeButton = (el) => {
+                        const a = document.createElement("a")
+                        a.onclick = () => {
+                            console.log("got in click")
+                            setTheme(z.css, z.name)
+                            localStorage.setItem(
+                                "editor_last_selected",
+                                JSON.stringify({ url: z.css, name: z.name })
+                            );
+                        }
+                        a.text = z.name;
+                        const div = document.createElement("div")
+                        div.classList.add("navbar-item")
+                        div.appendChild(a)
+                        div.addEventListener("click",()=>{console.log("in div click")})
+                        el.appendChild(div)
                     }
-                    a.text = z.name;
-                    const div = document.createElement("div")
-                    div.classList.add("navbar-item")
-                    div.appendChild(a)
+                    
                     if (k < max) {
-                        col1.forEach(x=>x.appendChild(div.cloneNode(true)))
+                        col1.forEach(createThemeButton)
                     } else {
-                        col2.forEach(x=>x.appendChild(div.cloneNode(true)))
+                        col2.forEach(createThemeButton)
                     }
                 })
             })
