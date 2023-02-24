@@ -32,20 +32,22 @@ function render_used_by(users)
     local function render(to_render, name, field_name)
         if #to_render > 0 then
 %>
-            <h3 class="is-size-5"><%=name%><h3>
-            <ul>
+            <h3 class="is-size-5"><%=name%></h3>
+            <p>
+                <ul>
 <%
-                for _k, used_in_type in ipairs(to_render) do
-                    for _k, used_by in ipairs(used_in_type[field_name]) do
+                    for _k, used_in_type in ipairs(to_render) do
+                        for _k, used_by in ipairs(used_in_type[field_name]) do
 %> 
-                        <li>
-                            <a href="<%=create_link(used_in_type.type_name) .. "#"..used_by%>"><%=used_in_type.type_name.."."..used_by%></a>
-                        </li>
+                            <li>
+                                <a href="<%=create_link(used_in_type.type_name) .. "#"..used_by%>"><%=used_in_type.type_name.."."..used_by%></a>
+                            </li>
 <% 
+                        end
                     end
-                end
 %>
-            </ul>
+                </ul>
+            <p>
 <%
         end
     end
