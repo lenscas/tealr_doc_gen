@@ -8,7 +8,8 @@ use std::{
 use anyhow::Context;
 use tealr::{
     mlu::{self, ExportInstances, FromToLua, TealData, TypedFunction},
-    GlobalInstance, NameContainer, RecordGenerator, TypeGenerator, TypeName, TypeWalker,
+    type_parts_to_str, GlobalInstance, NameContainer, RecordGenerator, TypeGenerator, TypeName,
+    TypeWalker,
 };
 
 use crate::{
@@ -138,7 +139,8 @@ impl ExportInstances for GlobalInstancesDoc {
         instance_collector.add_instance("template", move |_| Ok(template))?;
         instance_collector.add_instance("page", move |_| Ok(self.page))?;
         instance_collector.add_instance("globals", move |_| Ok(globals))?;
-        instance_collector.add_instance("all_types", move |_| Ok(all_types))?;
+        let all_types_2 = all_types.clone();
+        instance_collector.add_instance("all_types", move |_| Ok(all_types_2))?;
         instance_collector.add_instance("create_link", move |lua| {
             let link = link_path;
             TypedFunction::from_rust(
@@ -147,6 +149,18 @@ impl ExportInstances for GlobalInstancesDoc {
                         .find('#')
                         .map(|x| name.split_at(x))
                         .unwrap_or((&name, ""));
+                    let is_index = match &all_types {
+                        None => false,
+                        Some(x) => x.iter().any(|x| match x {
+                            TypeGenerator::Record(x) => {
+                                x.should_be_inlined
+                                    && type_parts_to_str(x.type_name.clone()) == name
+                            }
+                            TypeGenerator::Enum(_) => false,
+                        }),
+                    };
+                    let name = if is_index { "index" } else { name };
+
                     Ok(link
                         .join(name.to_string() + ".html" + hash)
                         .to_string_lossy()
@@ -477,7 +491,7 @@ fn run_and_write(
     minify_cfg.minify_css = true;
     minify_cfg.minify_js = true;
     let minified = minify_html::minify(as_bytes, &minify_cfg);
-    std::fs::write(&page_path, &minified)
+    std::fs::write(&page_path, minified)
         .with_context(|| format!("Could not write to {page_path:?}"))?;
     Ok(())
 }
