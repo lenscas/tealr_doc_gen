@@ -201,7 +201,7 @@ function render_markdown(markdown)
         return toTransform
     end
 %>
-    <div class="container">
+    <div class="container max-width">
         <%- parse_markdown(markdown, transformer) %>
     </div>
 <%
@@ -257,7 +257,7 @@ function render_record_part(header_name, record, parts)
             <p class="subtitle"><%=header_name-%>:</p>
         </div>
         <div class="panel-block">
-            <div class="container">
+            <div class="container max-width">
 <%
                 for _,name in ipairs(parts) do
                     render_part(name,record)
