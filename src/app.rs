@@ -2,9 +2,9 @@ use std::{collections::HashMap, fs::read_to_string};
 
 use anyhow::Context;
 use clap::{Arg, Command};
-use tealr::TypeName;
+use tealr::ToTypename;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum TemplateKind {
     Builtin,
     FromLua(String),
@@ -17,7 +17,7 @@ impl Default for TemplateKind {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum DefTemplateRunnerKind {
     Builtin,
     Custom(String),
@@ -30,7 +30,7 @@ pub enum DefTemplateRunnerKind {
     serde::Serialize,
     serde::Deserialize,
     tealr::mlu::FromToLua,
-    TypeName,
+    ToTypename,
 )]
 /// Template used to generate a definition file
 pub enum DefTemplateKind {
@@ -46,7 +46,7 @@ pub enum DefTemplateKind {
     serde::Serialize,
     serde::Deserialize,
     tealr::mlu::FromToLua,
-    TypeName,
+    ToTypename,
 )]
 /// The configuration for the definition files that get generated.
 ///
@@ -58,7 +58,7 @@ pub struct DefTemplateConfig {
     pub(crate) template: DefTemplateKind,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TypeDefFile {
     pub(crate) runner: DefTemplateRunnerKind,
     pub(crate) templates: HashMap<String, DefTemplateConfig>,
@@ -83,6 +83,17 @@ impl Default for TypeDefFile {
     }
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum LuaAddon {
+    False,
+    Create {
+        words: Vec<String>,
+        files: Vec<String>,
+        settings: HashMap<String, serde_json::Value>,
+    },
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Config {
     doc_template: TemplateKind,
@@ -90,6 +101,8 @@ pub struct Config {
     store_in: String,
     name: String,
     type_def_files: TypeDefFile,
+    lua_addon: Option<LuaAddon>,
+    is_global: bool,
 }
 
 impl Default for Config {
@@ -97,13 +110,20 @@ impl Default for Config {
         Self {
             doc_template: Default::default(),
             page_root: Default::default(),
+            is_global: true,
             store_in: "pages".into(),
             name: "Your_API".into(),
             type_def_files: Default::default(),
+            lua_addon: Some(LuaAddon::Create {
+                words: Vec::new(),
+                files: Vec::new(),
+                settings: HashMap::new(),
+            }),
         }
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Paths {
     pub(crate) json: String,
     pub(crate) name: String,
@@ -111,11 +131,13 @@ pub(crate) struct Paths {
     pub(crate) build_dir: String,
     pub(crate) template_kind: TemplateKind,
     pub(crate) def_config: TypeDefFile,
+    pub(crate) is_global: bool,
+    pub(crate) lua_addon: Option<LuaAddon>,
 }
 
 pub(crate) enum Modes {
     Credits,
-    GenerateDocs(Paths),
+    GenerateDocs(Box<Paths>),
     SelfDocTemplate {
         build_dir: String,
     },
@@ -185,14 +207,16 @@ pub(crate) fn get_paths() -> Result<Modes, anyhow::Error> {
 
     if matches.subcommand_matches("run").is_some() {
         let config: Config = read_config()?;
-        return Ok(Modes::GenerateDocs(Paths {
+        return Ok(Modes::GenerateDocs(Box::new(Paths {
+            is_global: config.is_global,
             json: config.name.clone() + ".json",
             build_dir: config.store_in,
             name: config.name,
             root: config.page_root,
             template_kind: config.doc_template,
             def_config: config.type_def_files,
-        }));
+            lua_addon: config.lua_addon,
+        })));
     }
     if let Some(x) = matches.subcommand_matches("gen-self") {
         if x.contains_id("docs_documentation_template") {

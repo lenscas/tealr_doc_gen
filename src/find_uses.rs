@@ -1,17 +1,15 @@
 use tealr::{NameContainer, TypeWalker};
 
-#[derive(Clone, tealr::mlu::FromToLua, tealr::TypeName)]
+#[derive(Clone, tealr::mlu::FromToLua, tealr::ToTypename)]
 ///Defines how another type uses this type
 pub struct User {
     ///the name of the type that uses this type
-    ///
-    ///abc [ToEnumGenerator](RecordGenerator#meta_method)
     type_name: String,
     ///the name of the methods that use this type as a parameter
     as_params: Vec<NameContainer>,
-    ///the name of the methods that hav this type as a return type
+    ///the name of the methods that have this type as a return type
     as_return: Vec<NameContainer>,
-    //the name of the fields that contain this type _somewhere_
+    ///the name of the fields that contain this type _somewhere_
     ///
     ///This can be as it contains just this type, or because it is part of a more complex type like an array or a function
     as_fields: Vec<NameContainer>,
@@ -47,6 +45,7 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
                     let name = x.name.clone();
                     let mut returns = Vec::new();
                     let mut params = Vec::new();
+                    #[allow(deprecated)]
                     for v in x.signature.iter() {
                         match v {
                             tealr::NamePart::Symbol(x) => {
