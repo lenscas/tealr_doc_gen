@@ -8,17 +8,18 @@ use std::{
 use anyhow::Context;
 use tealr::{
     mlu::{self, ExportInstances, FromToLua, TealData, TypedFunction},
-    type_parts_to_str, GlobalInstance, NameContainer, RecordGenerator, TypeGenerator, TypeName,
+    type_parts_to_str, GlobalInstance, NameContainer, RecordGenerator, ToTypename, TypeGenerator,
     TypeWalker,
 };
 
 use crate::{
-    app::{DefTemplateConfig, DefTemplateKind, Paths, TemplateKind},
+    app::{DefTemplateConfig, DefTemplateKind, LuaAddon, Paths, TemplateKind},
+    create_lua_addon::create_lua_addon,
     doc_gen::{get_type_name, type_should_be_inlined},
     markdown::MarkdownEvent,
 };
 
-#[derive(FromToLua, TypeName, Clone)]
+#[derive(FromToLua, ToTypename, Clone)]
 /// An element in the sidebar
 struct SideBar {
     /// What url to link to
@@ -28,7 +29,7 @@ struct SideBar {
     /// The members of the type
     members: Vec<Members>,
 }
-#[derive(FromToLua, TypeName, Clone)]
+#[derive(FromToLua, ToTypename, Clone)]
 /// A member as shown in the sidebar
 struct Members {
     /// The name of the member
@@ -57,26 +58,26 @@ impl TealData for TestDocs {
     }
 }
 
-#[derive(Clone, FromToLua, TypeName)]
-struct Type {
+#[derive(Clone, FromToLua, ToTypename)]
+struct TypeDesc {
     type_members: TypeGenerator,
     type_name: String,
     used_by: Vec<crate::find_uses::User>,
 }
-#[derive(Clone, FromToLua, TypeName)]
+#[derive(Clone, FromToLua, ToTypename)]
 struct IndexPage {
     all_types: Vec<TypeGenerator>,
     type_name: String,
     type_members: TypeGenerator,
 }
-#[derive(Clone, FromToLua, TypeName)]
+#[derive(Clone, FromToLua, ToTypename)]
 struct CustomPage {
     name: String,
     markdown_content: String,
 }
-#[derive(Clone, FromToLua, TypeName)]
+#[derive(Clone, FromToLua, ToTypename)]
 enum TypeOrPage {
-    Type(Type),
+    Type(TypeDesc),
     IndexPage(IndexPage),
     CustomPage(CustomPage),
 }
@@ -251,11 +252,33 @@ impl ExportInstances for GlobalInstancesDoc {
     }
 }
 
-pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(), anyhow::Error> {
+pub(crate) fn run_from_walker(
+    mut paths: Paths,
+    type_defs: TypeWalker,
+) -> Result<(), anyhow::Error> {
     let write_path = Path::new(&paths.build_dir).join(&paths.root);
     create_dir_all(&write_path)?;
     let definition_file_storage =
         create_d_file(type_defs.clone(), write_path.clone(), &paths.name, &paths)?;
+    let lua_addon_storage = create_lua_addon(
+        paths.lua_addon.unwrap_or(LuaAddon::False),
+        type_defs.clone(),
+        definition_file_storage.clone(),
+        paths.is_global,
+        &paths.name,
+    )
+    .context("Failed generating lua language server addon")?;
+
+    if lua_addon_storage {
+        paths.def_config.templates.insert(
+            "lua language server".into(),
+            DefTemplateConfig {
+                extension: ".zip".into(),
+                template: DefTemplateKind::Custom("Lua language server".into()),
+            },
+        );
+    }
+
     let link_path = Path::new("/").join(&paths.root);
 
     let sidebar: Vec<SideBar> = type_defs
@@ -299,6 +322,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
         })
         .collect();
     let mut z = RecordGenerator::new::<RecordGenerator>(true);
+
     for type_def in type_defs.iter() {
         let users = crate::find_uses::find_users(type_def, &type_defs);
         match type_def {
@@ -322,6 +346,7 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
             }
             TypeGenerator::Enum(_) => (),
         }
+        let definition_templates = paths.def_config.templates.clone();
         let (template_runner, docs_instance) =
             create_globals_docs(&paths.template_kind, type_def, |config| {
                 GlobalInstancesDoc {
@@ -329,14 +354,14 @@ pub(crate) fn run_from_walker(paths: Paths, type_defs: TypeWalker) -> Result<(),
                     link_path: link_path.clone(),
                     etlua: config.etlua,
                     template: config.template,
-                    page: TypeOrPage::Type(Type {
+                    page: TypeOrPage::Type(TypeDesc {
                         type_members: type_def.to_owned(),
                         type_name: config.type_name.to_string(),
                         used_by: users,
                     }),
                     all_types: Some(type_defs.given_types.clone()),
                     globals: Some(type_defs.global_instances_off.clone()),
-                    def_files: paths.def_config.templates.clone(),
+                    def_files: definition_templates.clone(),
                     library_name: paths.name.clone(),
                     definition_files_folder: definition_file_storage.to_string_lossy().to_string(),
                 }
@@ -534,6 +559,7 @@ pub(crate) fn create_d_file(
     name: &str,
     config: &Paths,
 ) -> Result<PathBuf, anyhow::Error> {
+    let is_global = config.is_global;
     let runner = match &config.def_config.runner {
         crate::app::DefTemplateRunnerKind::Builtin => {
             include_str!("../base_run_template.lua").to_string()
@@ -556,7 +582,7 @@ pub(crate) fn create_d_file(
             etlua,
             module: walker.clone(),
             template,
-            is_global: true,
+            is_global,
             name: name.to_string(),
         };
         mlu::set_global_env(x, &lua)?;
@@ -589,6 +615,13 @@ pub(crate) fn create_d_file(
 pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
     use crate::markdown::*;
     let x = tealr::TypeWalker::new()
+        .process_type::<tealr::FunctionParam>()
+        .process_type::<tealr::FunctionRepresentation>()
+        .process_type::<tealr::MapRepresentation>()
+        .process_type::<tealr::SingleType>()
+        .process_type::<tealr::Name>()
+        .process_type::<tealr::ExtraPage>()
+        .process_type::<tealr::Type>()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
         .process_type::<tealr::Field>()
@@ -614,7 +647,7 @@ pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
         .process_type::<MarkdownAlignment>()
         .process_type::<crate::find_uses::User>()
         .process_type::<IndexPage>()
-        .process_type::<Type>()
+        .process_type::<TypeDesc>()
         .process_type::<CustomPage>()
         .process_type::<TypeOrPage>()
         .document_global_instance::<GlobalInstancesDoc>()?;
@@ -623,6 +656,13 @@ pub fn generate_self_doc() -> Result<TypeWalker, anyhow::Error> {
 
 pub fn generate_self_def() -> Result<TypeWalker, anyhow::Error> {
     let x = tealr::TypeWalker::new()
+        .process_type::<tealr::FunctionParam>()
+        .process_type::<tealr::FunctionRepresentation>()
+        .process_type::<tealr::MapRepresentation>()
+        .process_type::<tealr::SingleType>()
+        .process_type::<tealr::Name>()
+        .process_type::<tealr::ExtraPage>()
+        .process_type::<tealr::Type>()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
         .process_type::<tealr::Field>()

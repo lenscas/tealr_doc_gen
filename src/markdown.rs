@@ -3,10 +3,10 @@ use pulldown_cmark::{
 };
 use tealr::{
     mlu::{mlua::FromLua, FromToLua},
-    TypeName,
+    ToTypename,
 };
 
-#[derive(Clone, Debug, TypeName, FromToLua)]
+#[derive(Clone, Debug, ToTypename, FromToLua)]
 ///What kind of codeblock it is
 pub enum MarkdownCodeBlockKind {
     Indented,
@@ -32,7 +32,7 @@ impl From<MarkdownCodeBlockKind> for CodeBlockKind<'static> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, TypeName, FromToLua)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ToTypename, FromToLua)]
 pub enum MarkdownHeadingLevel {
     H1 = 1,
     H2,
@@ -67,7 +67,7 @@ impl From<MarkdownHeadingLevel> for HeadingLevel {
     }
 }
 /// Text alignment in tables
-#[derive(TypeName, Debug, FromToLua, Clone)]
+#[derive(ToTypename, Debug, FromToLua, Clone)]
 pub enum MarkdownAlignment {
     /// Default text alignment.
     None,
@@ -97,7 +97,7 @@ impl From<MarkdownAlignment> for Alignment {
     }
 }
 
-#[derive(TypeName, Debug, FromToLua, Clone)]
+#[derive(ToTypename, Debug, FromToLua, Clone)]
 /// Type specifier for inline links
 pub enum MarkdownLinkType {
     /// Inline link like `[foo](bar)`
@@ -152,7 +152,7 @@ impl From<MarkdownLinkType> for LinkType {
     }
 }
 
-#[derive(Clone, Debug, FromToLua, TypeName)]
+#[derive(Clone, Debug, FromToLua, ToTypename)]
 /// Tags containing other elements
 pub enum MarkdownTag {
     /// A paragraph of text and other inline elements.
@@ -246,7 +246,7 @@ impl From<MarkdownTag> for Tag<'static> {
     }
 }
 
-#[derive(Clone, FromToLua, Debug, TypeName)]
+#[derive(Clone, FromToLua, Debug, ToTypename)]
 /// Markdown events that are generated in a preorder traversal of the document
 /// tree, with additional `End` events whenever all of an inner node's children
 /// have been visited.
