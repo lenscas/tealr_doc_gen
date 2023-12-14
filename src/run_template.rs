@@ -135,7 +135,7 @@ impl ExportInstances for GlobalInstancesDoc {
 
         instance_collector.add_instance("side_bar_types", move |_| Ok(side_bar))?;
         instance_collector.add_instance("etlua", move |lua| {
-            lua.load(&etlua).set_name("etlua")?.into_function()
+            lua.load(&etlua).set_name("etlua").into_function()
         })?;
         instance_collector.add_instance("template", move |_| Ok(template))?;
         instance_collector.add_instance("page", move |_| Ok(self.page))?;
@@ -507,7 +507,6 @@ fn run_and_write(
     let document: mlu::mlua::String = lua
         .load(template_runner)
         .set_name("template_runner")
-        .context("Failed setting name for lua thread")?
         .call(())
         .context("Failed while running template")?;
     let page_path = write_path.join(file_name);
@@ -538,7 +537,7 @@ impl ExportInstances for GlobalsDefFile {
         instance_collector.add_instance("module", |_| Ok(self.module))?;
         instance_collector.document_instance("function to load etlua");
         instance_collector.add_instance("etlua", |lua| {
-            lua.load(&self.etlua).set_name("etlua")?.into_function()
+            lua.load(&self.etlua).set_name("etlua").into_function()
         })?;
         instance_collector
             .document_instance("Wether it is a local or global record that wraps the module");
@@ -590,7 +589,6 @@ pub(crate) fn create_d_file(
         let document: mlu::mlua::String = lua
             .load(&runner)
             .set_name("template_runner")
-            .context("Failed setting name for lua thread")?
             .call(())
             .context("Failed running lua template")?;
         create_dir_all(&page_path).with_context(|| {
