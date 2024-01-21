@@ -313,7 +313,7 @@ pub(crate) fn run_from_walker(
                 let x = get_type_name(v).to_string();
                 (x.clone(), x)
             };
-            let link_to = link_to + ".html";
+            let link_to = sanitize_filename::sanitize(link_to) + ".html";
             SideBar {
                 link_to: link_path.join(link_to).to_string_lossy().into_owned(),
                 name,
@@ -495,11 +495,11 @@ fn run_and_write(
 ) -> Result<(), anyhow::Error> {
     let lua = unsafe { mlu::mlua::Lua::unsafe_new() };
 
-    let file_name = match &instance_setter.page {
+    let file_name = sanitize_filename::sanitize(match &instance_setter.page {
         TypeOrPage::Type(x) => &x.type_name,
         TypeOrPage::IndexPage(x) => &x.type_name,
         TypeOrPage::CustomPage(x) => &x.name,
-    }
+    })
     .to_owned()
         + ".html";
     mlu::set_global_env(instance_setter, &lua).context("Failed while setting globals")?;

@@ -25,3 +25,4 @@ tealr = { version = "0.9.1", git = "https://github.com/lenscas/tealr", features 
 ] }
 v_htmlescape = "0.14.1"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+sanitize-filename = "0.5.0"
