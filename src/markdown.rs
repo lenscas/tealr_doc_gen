@@ -263,10 +263,10 @@ pub enum MarkdownEvent {
     TaskListMarker(bool),
 }
 
-impl<'lua> tealr::mlu::FromLuaExact<'lua> for MarkdownEvent {
+impl tealr::mlu::FromLuaExact for MarkdownEvent {
     fn from_lua_exact(
-        value: tealr::mlu::mlua::Value<'lua>,
-        lua: &'lua tealr::mlu::mlua::Lua,
+        value: tealr::mlu::mlua::Value,
+        lua: &tealr::mlu::mlua::Lua,
     ) -> tealr::mlu::mlua::Result<Self> {
         MarkdownEvent::from_lua(value, lua)
     }

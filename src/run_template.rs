@@ -39,7 +39,7 @@ struct Members {
 #[derive(tealr::mlu::TealDerive)]
 struct TestDocs;
 impl TealData for TestDocs {
-    fn add_methods<'lua, T: mlu::TealDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlu::TealDataMethods<Self>>(methods: &mut T) {
         methods.document("```rs");
         methods.document("This should not be visible");
         methods.document("```");
@@ -52,7 +52,7 @@ impl TealData for TestDocs {
         methods.document_type("some documentation for the entire type");
     }
 
-    fn add_fields<'lua, F: mlu::TealDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: mlu::TealDataFields<Self>>(fields: &mut F) {
         fields.document("some docs for the next field");
         fields.add_field_function_get("a", |_, _| Ok(1))
     }
@@ -121,7 +121,7 @@ type OptionalMarkdownEvent = Option<MarkdownEvent>;
 tealr::create_union_mlua!(pub enum MarkdownTransformation = MarkdownEventTable | OptionalMarkdownEvent );
 
 impl ExportInstances for GlobalInstancesDoc {
-    fn add_instances<'lua, T: mlu::InstanceCollector<'lua>>(
+    fn add_instances<T: mlu::InstanceCollector>(
         self,
         instance_collector: &mut T,
     ) -> mlu::mlua::Result<()> {
@@ -514,7 +514,7 @@ fn run_and_write(
     let mut minify_cfg = minify_html::Cfg::spec_compliant();
     minify_cfg.minify_css = true;
     minify_cfg.minify_js = true;
-    let minified = minify_html::minify(as_bytes, &minify_cfg);
+    let minified = minify_html::minify(&as_bytes, &minify_cfg);
     std::fs::write(&page_path, minified)
         .with_context(|| format!("Could not write to {page_path:?}"))?;
     Ok(())
@@ -529,7 +529,7 @@ struct GlobalsDefFile {
     name: String,
 }
 impl ExportInstances for GlobalsDefFile {
-    fn add_instances<'lua, T: mlu::InstanceCollector<'lua>>(
+    fn add_instances<T: mlu::InstanceCollector>(
         self,
         instance_collector: &mut T,
     ) -> mlu::mlua::Result<()> {
