@@ -17,6 +17,18 @@ impl Default for TemplateKind {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct Paths {
+    pub(crate) json: String,
+    pub(crate) name: String,
+    pub(crate) root: String,
+    pub(crate) build_dir: String,
+    pub(crate) template_kind: TemplateKind,
+    pub(crate) def_config: TypeDefFile,
+    pub(crate) is_global: bool,
+    pub(crate) lua_addon: Option<LuaAddon>,
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum DefTemplateRunnerKind {
     Builtin,
@@ -121,18 +133,6 @@ impl Default for Config {
             }),
         }
     }
-}
-
-#[derive(Clone)]
-pub(crate) struct Paths {
-    pub(crate) json: String,
-    pub(crate) name: String,
-    pub(crate) root: String,
-    pub(crate) build_dir: String,
-    pub(crate) template_kind: TemplateKind,
-    pub(crate) def_config: TypeDefFile,
-    pub(crate) is_global: bool,
-    pub(crate) lua_addon: Option<LuaAddon>,
 }
 
 pub(crate) enum Modes {

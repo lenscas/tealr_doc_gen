@@ -4,9 +4,10 @@ use anyhow::Context;
 use serde::Serialize;
 use std::io::Write;
 use tealr::{
-    ExportedFunction, FunctionRepresentation, MapRepresentation, RecordGenerator, Type, TypeWalker,
+    ExportedFunction, FunctionParam, FunctionRepresentation, MapRepresentation, RecordGenerator,
+    Type, TypeWalker,
 };
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 use crate::app::LuaAddon;
 
@@ -47,18 +48,18 @@ pub fn create_lua_addon(
     path.push(&zip_name);
     let x = std::fs::File::create(&path).context("Could not create zipfile for lua addon")?;
     let mut x = zip::write::ZipWriter::new(x);
-    x.start_file("plugin.json", FileOptions::default())?;
+    x.start_file("plugin.json", SimpleFileOptions::default())?;
     x.write_all(
         serde_json::to_string_pretty(&config)
             .context("Could not create plugin.json")?
             .as_bytes(),
     )
     .context("Error while writing plugin.json")?;
-    x.add_directory("library", FileOptions::default())
+    x.add_directory("library", SimpleFileOptions::default())
         .context("Could not create library folder")?;
     x.start_file(
         format!("library/{}.lua", &config.name),
-        FileOptions::default(),
+        SimpleFileOptions::default(),
     )
     .context("Could not create library.lua file")?;
     let res = to_lua(&config.name, type_defs, is_global);
@@ -93,7 +94,7 @@ fn to_lua(name: &str, type_defs: TypeWalker, is_global: bool) -> String {
                     class_name.clear();
                     //class_name.push_str(name);
                     //class_name.push('.');
-                    class_name.push_str(&tealr::type_parts_to_str(x.type_name.clone()));
+                    class_name.push_str(&type_to_name(&x.ty, "", TypeIsPartOf::None));
                     write_record_as_class(
                         &mut class_methods,
                         &mut class_fields,
@@ -140,7 +141,7 @@ fn to_lua(name: &str, type_defs: TypeWalker, is_global: bool) -> String {
             )
         } else {
             classes.push_str("---@type ");
-            classes.push_str(&type_to_name(&global.ty, ""));
+            classes.push_str(&type_to_name(&global.ty, "", TypeIsPartOf::None));
             classes.push('\n');
             classes.push_str(&global.name);
             classes.push_str(" = nil");
@@ -170,7 +171,18 @@ fn write_record_as_class(
 ) {
     fields.reserve(generator.fields.len());
     methods.reserve(generator.functions.len() + generator.methods.len());
+
     if write_class {
+        if let Type::Single(ty) = &generator.ty {
+            ty.generics.iter().for_each(|generic| {
+                fields.push_str("---@diagnostic disable-next-line: duplicate-doc-alias\n");
+                fields.push_str("---@alias ");
+                fields.push_str(&type_to_name(generic, "", TypeIsPartOf::None));
+                fields.push_str(
+                    " any Temporary workaround for lls not having support for generic classes\n",
+                );
+            })
+        }
         fields.push_str("---@class ");
         fields.push_str(class_name);
         fields.push('\n');
@@ -179,7 +191,7 @@ fn write_record_as_class(
         fields.push_str("---@field ");
         fields.push_str(&String::from_utf8_lossy(&field.name));
         fields.push(' ');
-        fields.push_str(&type_to_name(&field.ty, base));
+        fields.push_str(&type_to_name(&field.ty, base, TypeIsPartOf::None));
         if let Some(x) = generator.documentation.get(&field.name) {
             fields.push(' ');
             fields.push_str(&x.replace('\n', "<br>"));
@@ -188,30 +200,40 @@ fn write_record_as_class(
     }
     if write_class {
         methods.push_str("local ");
-        methods.push_str(&tealr::type_parts_to_str(generator.type_name.clone()));
+        methods.push_str(&type_to_name(&generator.ty, "", TypeIsPartOf::None));
         methods.push_str(" = {}\n");
     }
-    if !generator.functions.is_empty() {
-        let mut function_written_out = String::new();
-        generator
-            .functions
-            .iter()
-            .chain(generator.mut_functions.iter())
-            .chain(generator.methods.iter())
-            .chain(generator.mut_methods.iter())
-            .chain(generator.meta_function.iter())
-            .chain(generator.meta_function_mut.iter())
-            .chain(generator.meta_method.iter())
-            .chain(generator.meta_method_mut.iter())
-            .for_each(|function| {
-                write_function(
-                    function,
-                    class_name,
-                    base,
-                    &mut function_written_out,
-                    methods,
-                )
-            });
+    let mut function_written_out = String::new();
+    generator
+        .functions
+        .iter()
+        .chain(generator.mut_functions.iter())
+        .chain(generator.methods.iter())
+        .chain(generator.mut_methods.iter())
+        .chain(generator.meta_function.iter())
+        .chain(generator.meta_function_mut.iter())
+        .chain(generator.meta_method.iter())
+        .chain(generator.meta_method_mut.iter())
+        .for_each(|function| {
+            write_function(
+                function,
+                class_name,
+                base,
+                &mut function_written_out,
+                methods,
+            )
+        });
+}
+
+fn get_param_name(param: &FunctionParam, key: usize) -> String {
+    if let Type::Variadic(_) = param.ty {
+        String::from("...")
+    } else {
+        param
+            .param_name
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("Param{}", key + 1))
     }
 }
 
@@ -240,16 +262,17 @@ fn write_function(
     if !function.params.is_empty() {
         for (key, param) in function.params.iter().enumerate() {
             methods.push_str("---@param ");
-            let param_name = param
-                .param_name
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| format!("Param{}", key + 1));
+
+            let param_name = get_param_name(param, key);
             methods.push_str(&param_name);
             function_written_out.push_str(&param_name);
             function_written_out.push(',');
             methods.push(' ');
-            methods.push_str(&type_to_name(&param.ty, base));
+            methods.push_str(&type_to_name(
+                &param.ty,
+                base,
+                TypeIsPartOf::FunctionParameter,
+            ));
 
             methods.push('\n')
         }
@@ -258,26 +281,29 @@ fn write_function(
     function_written_out.push_str(") end\n");
     for returned in &function.returns {
         methods.push_str("---@return ");
-        methods.push_str(&type_to_name(returned, base));
+        methods.push_str(&type_to_name(returned, base, TypeIsPartOf::FunctionReturn));
         methods.push('\n');
     }
     methods.push_str(function_written_out);
 }
 
-fn type_to_name(ty: &Type, base: &str) -> String {
+#[derive(PartialEq, Eq)]
+enum TypeIsPartOf {
+    None,
+    FunctionParameter,
+    FunctionReturn,
+}
+
+fn type_to_name(ty: &Type, base: &str, part_off: TypeIsPartOf) -> String {
     match ty {
         Type::Function(FunctionRepresentation { params, returns }) => {
             let mut name = "fun(".to_string();
             if !params.is_empty() {
                 for (key, param) in params.iter().enumerate() {
-                    let param_name = param
-                        .param_name
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| format!("Param{}", key + 1));
+                    let param_name = get_param_name(param, key);
                     name += &param_name;
                     name += ":";
-                    name += &type_to_name(&param.ty, base);
+                    name += &type_to_name(&param.ty, base, TypeIsPartOf::FunctionParameter);
                     name += ",";
                 }
                 name.pop();
@@ -285,7 +311,7 @@ fn type_to_name(ty: &Type, base: &str) -> String {
             name += "):";
             if !returns.is_empty() {
                 for returned in returns {
-                    name += &type_to_name(returned, base);
+                    name += &type_to_name(returned, base, TypeIsPartOf::FunctionReturn);
                     name += ",";
                 }
                 name.pop();
@@ -316,18 +342,18 @@ fn type_to_name(ty: &Type, base: &str) -> String {
                 .unwrap_or(full_name)
         }
         Type::Array(x) => {
-            let x = type_to_name(x, base);
+            let x = type_to_name(x, base, TypeIsPartOf::None);
             format! {"({})[]",x}
         }
         Type::Map(MapRepresentation { key, value }) => {
-            let key = type_to_name(key, base);
-            let value = type_to_name(value, base);
+            let key = type_to_name(key, base, TypeIsPartOf::None);
+            let value = type_to_name(value, base, TypeIsPartOf::None);
             format!("{{ [{}]: {}}}", key, value)
         }
         Type::Or(x) => {
             let mut name = String::with_capacity(x.len() * 2 + 4);
             name.push_str("( ");
-            for part in x.iter().map(|v| type_to_name(v, base)) {
+            for part in x.iter().map(|v| type_to_name(v, base, TypeIsPartOf::None)) {
                 name += &part;
                 name.push('|');
             }
@@ -337,11 +363,18 @@ fn type_to_name(ty: &Type, base: &str) -> String {
         }
         Type::Tuple(x) => {
             let mut name = String::with_capacity(x.len() * 2);
-            for part in x.iter().map(|v| type_to_name(v, base)) {
+            for part in x.iter().map(|v| type_to_name(v, base, TypeIsPartOf::None)) {
                 name += &part;
                 name.push(',');
             }
             name.pop();
+            name
+        }
+        Type::Variadic(x) => {
+            let mut name = type_to_name(x, base, TypeIsPartOf::None);
+            if part_off == TypeIsPartOf::FunctionReturn {
+                name += " ...";
+            }
             name
         }
     }

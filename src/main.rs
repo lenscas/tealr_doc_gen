@@ -1,15 +1,15 @@
 use app::Paths;
-use run_template::{generate_self_def, generate_self_doc};
+use generation::{generate_self_def, generate_self_doc, run_from_walker, run_template};
 
 use crate::app::get_paths;
 
 mod app;
-mod create_lua_addon;
 mod credits;
 mod doc_gen;
 mod find_uses;
+mod generation;
 mod markdown;
-mod run_template;
+mod render_type;
 fn main() -> anyhow::Result<()> {
     match get_paths()? {
         app::Modes::Credits => {
@@ -17,11 +17,11 @@ fn main() -> anyhow::Result<()> {
         }
         app::Modes::GenerateDocs(x) => {
             //generate_docs::generate_docs(x)
-            run_template::run_template(*x)?;
+            run_template(*x)?;
         }
         app::Modes::SelfDocTemplate { build_dir } => {
             let walker = generate_self_doc()?;
-            run_template::run_from_walker(
+            run_from_walker(
                 Paths {
                     is_global: true,
                     json: "{}".into(),
@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
         app::Modes::Nothing => (),
         app::Modes::SelfDefTemplate { build_dir } => {
             let walker = generate_self_def()?;
-            run_template::run_from_walker(
+            run_from_walker(
                 Paths {
                     is_global: true,
                     json: "{}".into(),
