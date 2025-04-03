@@ -85,7 +85,7 @@ function get_type_renderer(render_in, render_html_in)
             return v.ty
         end), generics)
         generics_to_process = concat_array(generics_to_process, get_missing_generics(funcRes.returns, generics))
-        generics_to_process = dedupe_by(generics_to_process, function(a) return a end)
+        generics_to_process = dedupe_by(generics_to_process, function(a) return a[0] end)
         generics = concat_array(generics, generics_to_process)
         if #generics_to_process > 1 then
             rendered = rendered .. render("<")
