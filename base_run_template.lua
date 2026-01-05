@@ -1,5 +1,7 @@
 local etlua = etlua()
-
+---comment
+---@param name string
+---@param tbl any
 function inspect_type(name, tbl)
     if type(tbl) == "table" then
         for k, v in pairs(tbl) do
@@ -40,13 +42,22 @@ function map(tbl, mapper)
     return result
 end
 
+---comment
+---@param types Type[]
+---@param generics Name[]
+---@return table
 function get_missing_generics(types, generics)
     local current_generics = {}
     for _, v in ipairs(types) do
-        local found_generics = find_generics(v, generics)
+        local found_generics = find_generics(v)
         concat_array(current_generics, found_generics)
     end
-    current_generics = dedupe_by(current_generics, function(a) return a end)
+    current_generics = dedupe_by(
+        current_generics,
+        function(a)
+            return a
+        end
+    )
     local generics_to_process = {}
     for _, v in ipairs(current_generics) do
         local found = false
@@ -63,11 +74,22 @@ function get_missing_generics(types, generics)
     return generics_to_process
 end
 
-function get_type_renderer(render_in, render_html_in)
+---@class RenderOptionsOptions
+---@field generics Name[]
+---@field in_params boolean
+---@field is_variadic boolean
+
+---comment
+---@param render_in function(string):string
+---@param render_html_in? function(string):string
+---@param type_appendage? string
+---@return RenderOptions
+function get_type_renderer(render_in, render_html_in, type_appendage)
     local render = function(a)
         render_in(a)
         return a
     end
+    type_appendage = (type_appendage and (type_appendage .. ".")) or ""
     local render_html
     if render_html_in then
         render_html = function(a)
@@ -85,7 +107,7 @@ function get_type_renderer(render_in, render_html_in)
             return v.ty
         end), generics)
         generics_to_process = concat_array(generics_to_process, get_missing_generics(funcRes.returns, generics))
-        generics_to_process = dedupe_by(generics_to_process, function(a) return a[0] end)
+        generics_to_process = dedupe_by(generics_to_process, function(a) return a end)
         generics = concat_array(generics, generics_to_process)
         if #generics_to_process >= 1 then
             rendered = rendered .. render("<")
@@ -121,18 +143,30 @@ function get_type_renderer(render_in, render_html_in)
             rendered = rendered .. type_to_string(v.ty, renderer, { in_params = true, generics = generics })
         end
         rendered = rendered .. render(")")
-        if #funcRes.returns > 0 then
+        local endRender = ""
+        if #funcRes.returns > 1 then
             rendered = rendered .. render(": ((")
+            endRender = "))"
+        elseif #funcRes.returns == 1 then
+            rendered = rendered .. render(" : ")
+            local toReturn = funcRes.returns[1]
+            if not toReturn:IsSingle() then
+                rendered = rendered .. render("(")
+                endRender = ")"
+            end
         end
         for k, v in ipairs(funcRes.returns) do
             if k > 1 then
-                rendered = rendered .. render(" ) , (")
+                if v:IsVariadic() then
+                    rendered = rendered .. render(" ) , ")
+                    endRender = ")"
+                else
+                    rendered = rendered .. render(" ) , (")
+                end
             end
             rendered = rendered .. type_to_string(v, renderer, { in_return = true, generics = generics })
         end
-        if #funcRes.returns > 0 then
-            rendered = rendered .. render(" ))")
-        end
+        rendered = rendered .. render(endRender)
 
         return rendered
     end
@@ -146,14 +180,19 @@ function get_type_renderer(render_in, render_html_in)
     end
 
     renderer["or"] = function(orRes, extra)
-        local rendered = render("( ")
+        local rendered = ""
+        if not extra.is_variadic then
+            rendered = rendered .. render("( ")
+        end
         for k, v in ipairs(orRes) do
             if k > 1 then
                 rendered = rendered .. render(" | ")
             end
             rendered = rendered .. type_to_string(v, renderer, extra)
         end
-        rendered = rendered .. render(" )")
+        if not extra.is_variadic then
+            rendered = rendered .. render(" )")
+        end
         return rendered
     end
     function renderer.array(arrayRes, extra)
@@ -164,14 +203,19 @@ function get_type_renderer(render_in, render_html_in)
     end
 
     function renderer.tuple(orRes, extra)
-        local rendered = render("( ")
+        local rendered = ""
+        if not extra.is_variadic then
+            rendered = rendered .. render("( ")
+        end
         for k, v in ipairs(orRes) do
             if k > 1 then
                 rendered = rendered .. render(" , ")
             end
             rendered = rendered .. type_to_string(v, renderer, extra)
         end
-        rendered = rendered .. render(" )")
+        if not extra.is_variadic then
+            rendered = rendered .. render(" )")
+        end
         return rendered
     end
 
@@ -181,10 +225,13 @@ function get_type_renderer(render_in, render_html_in)
         if type(name) == "table" then
             name = name[0]
         end
-        if render_html and ty.kind == "External" then
-            render_html("<a href=\"")
-            render(type_to_link(ty))
-            render_html("\">")
+        if ty.kind == "External" then
+            if render_html then
+                render_html("<a href=\"")
+                render(type_to_link(ty))
+                render_html("\">")
+            end
+            rendered = rendered .. render(type_appendage)
         end
         rendered = rendered .. render(name)
         if #ty.generics > 0 then
@@ -210,9 +257,10 @@ function get_type_renderer(render_in, render_html_in)
                 extra.in_return
             ) then
             print(
-                "Found a variadic type that is not part of a function signature. THIS iS AN IMPOSSIBLE PLACE FOR A VARIADIC TO SHOW UP!")
+                "Found a variadic type that is not part of a function signature. THIS iS AN IMPOSSIBLE PLACE FOR A VARIADIC TO SHOW UP!"
+            )
         end
-        local rendered = type_to_string(varRes, renderer, { generics = extra.generics })
+        local rendered = type_to_string(varRes, renderer, { generics = extra.generics, is_variadic = true })
         if extra.in_return then
             rendered = rendered .. render("...")
         end

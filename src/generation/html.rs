@@ -7,7 +7,7 @@ use std::{
 use anyhow::Context;
 use tealr::{
     mlu::{self, ExportInstances, FromToLua, TypedFunction},
-    type_parts_to_str, GlobalInstance, ToTypename, TypeGenerator, TypeWalker,
+    type_to_string, GlobalInstance, ToTypename, TypeGenerator, TypeWalker,
 };
 
 use crate::{
@@ -128,8 +128,7 @@ impl ExportInstances for GlobalInstancesDoc {
                         None => false,
                         Some(x) => x.iter().any(|x| match x {
                             TypeGenerator::Record(x) => {
-                                x.should_be_inlined
-                                    && type_parts_to_str(x.type_name.clone()) == name
+                                x.should_be_inlined && type_to_string(&x.ty, false) == name
                             }
                             TypeGenerator::Enum(_) => false,
                         }),
@@ -231,7 +230,7 @@ pub(super) fn create_globals_docs(
         a(CreateGlobalInstanceDocs {
             etlua,
             template,
-            type_name,
+            type_name: type_name.into(),
         }),
     ))
 }

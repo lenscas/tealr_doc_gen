@@ -23,7 +23,9 @@ tealr = { version = "0.10.0", git = "https://github.com/lenscas/tealr", features
     "mlua_lua54",
     "mlua_vendored",
     "mlua_anyhow",
-] }
+    "derive",
+
+], default-features = false }
 sanitize-filename = "0.5.0"
 
 # tealr = { version = "0.10.0", path = "../tealr2", features = [
@@ -31,6 +33,7 @@ sanitize-filename = "0.5.0"
 #     "mlua_lua54",
 #     "mlua_vendored",
 #     "mlua_anyhow",
-# ] }
+#     "derive",
+# ], default-features = false }
 v_htmlescape = "0.15.8"
 zip = { version = "2.2.0", default-features = false, features = ["deflate"] }

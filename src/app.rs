@@ -4,17 +4,12 @@ use anyhow::Context;
 use clap::{Arg, Command};
 use tealr::ToTypename;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
 pub enum TemplateKind {
+    #[default]
     Builtin,
     FromLua(String),
     FromTemplate(String),
-}
-
-impl Default for TemplateKind {
-    fn default() -> Self {
-        Self::Builtin
-    }
 }
 
 #[derive(Clone)]
