@@ -58,7 +58,7 @@ fn find_types_missing_export(walker: &TypeWalker) -> Vec<(tealr::SingleType, Str
         .iter()
         .flat_map(|x| {
             if let tealr::TypeGenerator::Record(record_generator) = x {
-                let name = tealr::type_parts_to_str(record_generator.type_name.clone()).to_string();
+                let name = tealr::type_to_string(&record_generator.ty, false);
                 let name2 = name.clone();
                 record_generator
                     .fields
@@ -143,7 +143,7 @@ fn extract_all_singular_types_from_type<'a>(
 fn extract_all_function_types_from_record_generator(
     record_generator: &tealr::RecordGenerator,
 ) -> impl Iterator<Item = (tealr::Type, String)> + '_ {
-    let name = tealr::type_parts_to_str(record_generator.type_name.clone()).to_string();
+    let name = tealr::type_to_string(&record_generator.ty, false).to_string();
     extract_types_from_exported_functions(&record_generator.functions, name.clone())
         .chain(extract_types_from_exported_functions(
             &record_generator.methods,

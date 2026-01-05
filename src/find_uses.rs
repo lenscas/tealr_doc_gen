@@ -78,13 +78,11 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
         should_be_inlined: true,
         is_user_data: false,
         ty: inlined_type,
-        type_name: Default::default(),
         fields: type_walker
             .global_instances_off
             .iter()
             .map(|v| Field {
                 name: v.to_owned().name.into(),
-                teal_type: v.teal_type.clone(),
                 ty: v.ty.to_owned(),
             })
             .collect(),

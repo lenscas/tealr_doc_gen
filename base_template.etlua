@@ -58,7 +58,7 @@ function render_used_by(users)
                                     </a>
                                     <span>: </span>
                                     <span>
-                                        <%render_type(used_by.signature, used_in_type.ty.generics)%>
+                                        <%render_type(used_by.signature, map(used_in_type.ty.generics, function(a) return a end))%>
                                     </span>
                                 </code>
                             </li>
@@ -217,38 +217,20 @@ function render_markdown(markdown)
 <% 
 end
 
-function renderTealTypeOf(type_parts)
-    for k,v in ipairs(type_parts) do 
-        local name = v:GetSymbolOrNil()
-        if name then
-            render(name)
-        else
-            name = v:GetTypeOrNil()
-            if name.type_kind == "Builtin" or name.type_kind == "Generic" then
-                render(name.name)
-            else
-%>
-                <a href="<%=create_link(name.name)-%>"><%= name.name -%></a>
-<%
-            end
-        end
-    end
-end
-
 function render_function(func, generics)
     renderer["function"](func, {generics = generics})
 end
-function render_type(ty)
-    type_to_string(ty,renderer, {})
+function render_type(ty, generics)
+    type_to_string(ty,renderer, {generics = generics})
 end
 
-function render_record_part(header_name, record, parts)
+function render_record_part(header_name, record, parts, generics)
     function render_part(part_name, record)
         for x, member in pairs(dedupe_by(record[part_name],function(x)return x.name end)) do
             local duped_generics = map(generics or {}, function(a) return a end)
-            local to_render = function() return render_function(member, generics) end
+            local to_render = function() return render_function(member, duped_generics) end
             if part_name == "fields" or part_name == "static_fields" then
-                to_render = function() return render_type(member.ty, generics) end
+                to_render = function() return render_type(member.ty, duped_generics) end
             end
 %>
             <div class="card block">
@@ -311,9 +293,13 @@ if t then
     local ty = type_members:type_name()
     type_name = type_to_string(ty, type_name_getter, {})
     used_by = t.used_by
+    
     if type_members:IsRecord() then
         local record = type_members:GetRecordOrNil()
-        generics = get_missing_generics({record.ty}, {})
+        if record.ty:IsSingle() then
+            local single = record.ty:GetSingleOrNil()
+            generics = single.generics
+        end
     end
 elseif index then
     type_name = index.type_name
@@ -517,7 +503,7 @@ page_name = page_name or type_name
                                                 </div>
                                             </div>
                                 <%
-                                            render_record_part("Fields",record,{"fields","static_fields"})
+                                            render_record_part("Fields",record,{"fields","static_fields"}, generics)
                                             render_record_part("Methods",record, {
                                                 "methods",
                                                 "mut_methods","functions",
@@ -526,7 +512,7 @@ page_name = page_name or type_name
                                                 "meta_method_mut",
                                                 "meta_function",
                                                 "meta_function_mut"
-                                            })
+                                            }, generics)
                                         end
                                         local enum = type_members:GetEnumOrNil()
                                         if enum then
@@ -569,7 +555,7 @@ page_name = page_name or type_name
                                                             <div class="card block">
                                                                 <div id="<%= global_instance.name %>" class="card-heading">
                                                                     <code class="card-header-title">
-                                                                        <h3>global <%= global_instance.name %> : <% renderTealTypeOf(global_instance.teal_type) %> </h3>
+                                                                        <h3>global <%= global_instance.name %> : <% render_type(global_instance.ty) %> </h3>
                                                                     </code>
                                                                 </div>
                                                         <%
@@ -606,7 +592,7 @@ page_name = page_name or type_name
                                                                     <div class="card block">
                                                                         <div id="<%= record.type_name %>" class="card-heading">
                                                                             <code class="card-header-title">
-                                                                                <p><% renderTealTypeOf(record.type_name) %> </p>
+                                                                                <p><% render_type(record.ty) %> </p>
                                                                             </code>
                                                                         </div>
                                                                         <div class="card-content content">

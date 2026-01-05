@@ -94,12 +94,12 @@ pub fn render_type<X: ToTypename + IntoLua>(
     Ok(res)
 }
 
-pub fn find_all_generics(ty: &tealr::Type) -> Vec<Name> {
+pub fn find_all_generics(ty: &tealr::Type) -> Vec<Type> {
     let mut generics = Vec::new();
     match ty {
         tealr::Type::Single(single_type) => {
             if single_type.kind.is_generic() {
-                generics.push(single_type.name.clone());
+                generics.push(Type::Single(single_type.clone()));
             }
             single_type
                 .generics
@@ -120,15 +120,13 @@ pub fn find_all_generics(ty: &tealr::Type) -> Vec<Name> {
             generics.extend(find_all_generics(x));
         }
         tealr::Type::Function(function_representation) => {
-            #[expect(deprecated)]
             let x = ExportedFunction {
                 name: std::borrow::Cow::from("foo").into(),
-                signature: Vec::new().into(),
                 params: function_representation.params.to_owned(),
                 returns: function_representation.returns.to_owned(),
                 is_meta_method: false,
             };
-            generics.extend(x.get_generics().into_iter().map(|v| v.to_owned()));
+            generics.extend(x.get_generic_types().into_iter().map(|v| v.to_owned()));
         }
     }
     generics
@@ -215,11 +213,6 @@ impl ToTypename for SingleTypeNoConsume {
         SingleType::to_typename()
     }
 
-    fn to_old_type_parts() -> std::borrow::Cow<'static, [tealr::NamePart]> {
-        #[allow(deprecated)]
-        tealr::new_type_to_old(SingleType::to_typename(), false)
-    }
-
     fn to_function_param() -> Vec<tealr::FunctionParam> {
         SingleType::to_function_param()
     }
@@ -258,12 +251,3 @@ pub fn type_to_link_url(
     link_path.set_extension("html");
     Some(link_path)
 }
-
-// pub fn create_link_from_type(
-//     ty: &Type,
-//     fallback: &str,
-//     all_types: &[TypeGenerator],
-//     link_path: PathBuf,
-// ) -> String {
-
-// )

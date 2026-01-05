@@ -9,23 +9,16 @@ function render_nl(str)
 end
 
 local renderer = get_type_renderer(render)
+local extended_renderer = function(extend_with) return get_type_renderer(render, nil, extend_with) end
 
-function renderTealTypeOf(type_parts, with, maybe_extend_with)
-    local total_to_render = {with}
-    for k,v in ipairs(type_parts) do
-        local name = v:GetSymbolOrNil()
-        if name then
-            table.insert(total_to_render,name)
-        else
-            teal_type = v:GetTypeOrNil()
-            if teal_type.type_kind == "External" and maybe_extend_with then
-                table.insert(total_to_render, maybe_extend_with)
-                table.insert(total_to_render, ".")
-            end
-            table.insert(total_to_render, teal_type.name)
-        end
+function renderTealTypeOf(ty_name, with, maybe_extend_with)
+    render(with)
+    render(" ")
+    local renderer_to_use = renderer
+    if maybe_extend_with then
+        renderer_to_use = extended_renderer(maybe_extend_with)
     end
-    render(table.concat(total_to_render,""))
+    type_to_string(ty_name, renderer_to_use, {})
 end
 
 
@@ -33,24 +26,21 @@ function render_member(member, generics)
     render("        ")
     render(member.name)
     render(":")
-    if member.signature then
+    if member.params then
         renderer["function"](member, {generics = generics})
     else
         local ty = member.ty
         type_to_string(ty, renderer, {generics = generics})
     end
     render_nl("")
-    -- local sig = member.teal_type or member.signature
-    -- renderTealTypeOf(sig, "    " .. member.name .. " : ")
 end
 function render_members(members,doc, existing_generics)
-    local generics =  map(existing_generics, function(a) return a end)
     for _,member in ipairs(members) do
         local docs = doc[member.name]
         if docs then
             render_nl("    --"..string.gsub(docs, "\n", "\n        --"))
         end
-        render_member(member, generics)
+        render_member(member, map(existing_generics, function(a) return a end))
     end
 end
 
@@ -61,7 +51,7 @@ end
         for _, teal_type in ipairs(module.given_types) do 
             local enum = teal_type:GetEnumOrNil()
             if enum then
-                renderTealTypeOf(enum.name,"enum ")
+                renderTealTypeOf(enum.ty,"enum ")
                 render_nl("")
                 for _, variant in ipairs(enum.variants) do
                     render("        \"")
@@ -76,22 +66,23 @@ end
             if record then
                 if not record.should_be_inlined then
     %>
-    <% renderTealTypeOf(record.type_name,"record ") %>
+    <% renderTealTypeOf(record.ty,"record ") %>
         <%=(record.is_user_data and "userdata") or ""%>
     <%
                 end
-                local generics =  get_missing_generics(record.ty,{})
-                        render_nl("--"..string.gsub(record.type_doc, "\n", "\n        --"))
-                        render_members(record.fields,record.documentation, generics)
-                        render_members(record.static_fields,record.documentation, generics)
-                        render_members(record.methods,record.documentation, generics)
-                        render_members(record.mut_methods,record.documentation, generics)
-                        render_members(record.functions,record.documentation, generics)
-                        render_members(record.mut_functions,record.documentation, generics)
-                        render_members(record.meta_method,record.documentation, generics)
-                        render_members(record.meta_method_mut,record.documentation, generics)
-                        render_members(record.meta_function,record.documentation, generics)
-                        render_members(record.meta_function_mut,record.documentation, generics)
+                local generics =  get_missing_generics({record.ty},{})
+                local ty = record.ty:GetSingleOrNil()
+                render_nl("--"..string.gsub(record.type_doc, "\n", "\n        --"))
+                render_members(record.fields,record.documentation, generics)
+                render_members(record.static_fields,record.documentation, generics)
+                render_members(record.methods,record.documentation, generics)
+                render_members(record.mut_methods,record.documentation, generics)
+                render_members(record.functions,record.documentation, generics)
+                render_members(record.mut_functions,record.documentation, generics)
+                render_members(record.meta_method,record.documentation, generics)
+                render_members(record.meta_method_mut,record.documentation, generics)
+                render_members(record.meta_function,record.documentation, generics)
+                render_members(record.meta_function_mut,record.documentation, generics)
                 if not record.should_be_inlined then 
     %>
     end
@@ -109,7 +100,7 @@ for _, global_instance in ipairs(module.global_instances_off) do
         render("--"..string.gsub(global_instance.doc, "\n", "\n        --"))
     end
     render_nl("--")
-    renderTealTypeOf(global_instance.teal_type, "global " .. global_instance.name .. " : ", name)
+    renderTealTypeOf(global_instance.ty, "global " .. global_instance.name .. " : ", name)
 end
 %>
 

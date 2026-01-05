@@ -111,7 +111,7 @@ fn to_lua(name: &str, type_defs: TypeWalker, is_global: bool) -> String {
                 classes.push_str("---@alias ");
                 //classes.push_str(name);
                 //classes.push('.');
-                classes.push_str(&tealr::type_parts_to_str(x.name));
+                classes.push_str(&type_to_name(&x.ty, "", TypeIsPartOf::None));
                 classes.push('\n');
                 for variant in x.variants {
                     classes.push_str("---|'\"");
@@ -128,8 +128,7 @@ fn to_lua(name: &str, type_defs: TypeWalker, is_global: bool) -> String {
             write_function(
                 #[allow(deprecated)]
                 &ExportedFunction {
-                    name: global.name.clone().into(),
-                    signature: Vec::new().into(),
+                    name: global.name.into(),
                     params: x.params.to_owned(),
                     returns: x.returns.to_owned(),
                     is_meta_method: false,
@@ -187,16 +186,32 @@ fn write_record_as_class(
         fields.push_str(class_name);
         fields.push('\n');
     }
-    for field in &generator.fields {
-        fields.push_str("---@field ");
-        fields.push_str(&String::from_utf8_lossy(&field.name));
-        fields.push(' ');
-        fields.push_str(&type_to_name(&field.ty, base, TypeIsPartOf::None));
-        if let Some(x) = generator.documentation.get(&field.name) {
+    if write_class {
+        for field in &generator.fields {
+            fields.push_str("---@field ");
+            fields.push_str(&String::from_utf8_lossy(&field.name));
             fields.push(' ');
-            fields.push_str(&x.replace('\n', "<br>"));
+            fields.push_str(&type_to_name(&field.ty, base, TypeIsPartOf::None));
+            if let Some(x) = generator.documentation.get(&field.name) {
+                fields.push(' ');
+                fields.push_str(&x.replace('\n', "<br>"));
+            }
+            fields.push('\n');
         }
-        fields.push('\n');
+    } else {
+        for field in &generator.fields {
+            methods.push_str("---@type ");
+            methods.push_str(&type_to_name(&field.ty, base, TypeIsPartOf::None));
+            if let Some(x) = generator.documentation.get(&field.name) {
+                methods.push(' ');
+                methods.push_str(&x.replace('\n', "<br>"));
+            }
+            methods.push('\n');
+            methods.push_str(class_name);
+            methods.push('.');
+            methods.push_str(&String::from_utf8_lossy(&field.name));
+            methods.push_str(" = nil\n");
+        }
     }
     if write_class {
         methods.push_str("local ");

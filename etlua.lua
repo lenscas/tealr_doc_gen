@@ -152,14 +152,14 @@ do
                 self.str:find(self.close_tag, self.pos, true)
             if not (close_start) then
                 return nil,
-                       self:error_for_pos(start, "failed to find closing tag")
+                    self:error_for_pos(start, "failed to find closing tag")
             end
             while self:in_string(self.pos, close_start) do
                 close_start, close_stop =
                     self.str:find(self.close_tag, close_stop, true)
                 if not (close_start) then
                     return nil, self:error_for_pos(start,
-                                                   "failed to find string close")
+                        "failed to find string close")
                 end
             end
             local trim_newline
@@ -213,8 +213,8 @@ do
                                 if lstring then
                                     local lstring_end = lstring:gsub("%[", "]")
                                     local lstring_p1, lstring_p2 = chunk:find(
-                                                                       lstring_end,
-                                                                       pos, true)
+                                        lstring_end,
+                                        pos, true)
                                     if not (lstring_p1) then
                                         return true
                                     end
@@ -234,7 +234,7 @@ do
             return insert(self.chunks, self.str:sub(start, stop))
         end,
         push_code = function(self, kind, start, stop)
-            return insert(self.chunks, {kind, self.str:sub(start, stop), start})
+            return insert(self.chunks, { kind, self.str:sub(start, stop), start })
         end,
         compile = function(self, str)
             local success, err = self:parse(str)
@@ -277,7 +277,7 @@ do
             local source_line_no = pos_to_line(self.str, source_pos)
             local source_line = get_line(self.str, source_line_no)
             return tostring(err_msg) .. " [" .. tostring(source_line_no) ..
-                       "]: " .. tostring(source_line)
+                "]: " .. tostring(source_line)
         end,
         load = function(self, code, name)
             if name == nil then name = "etlua" end
