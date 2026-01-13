@@ -4,7 +4,9 @@ local etlua = etlua()
 ---@param tbl any
 function inspect_type(name, tbl)
     if type(tbl) == "table" then
+        local looped_once = false
         for k, v in pairs(tbl) do
+            looped_once = true
             local typeOf = type(v)
             if typeOf == "table" then
                 print(name, " has ", k, "of", typeOf, "with")
@@ -12,6 +14,9 @@ function inspect_type(name, tbl)
             else
                 print(name, " has ", k, "of", typeOf, "containing", v)
             end
+        end
+        if not looped_once then
+            print(name .. " is empty table")
         end
     else
         print(name, " is a", type(tbl), "containing", tbl)
@@ -268,6 +273,54 @@ function get_type_renderer(render_in, render_html_in, type_appendage)
     end
 
     return renderer
+end
+
+---comment
+---@param render fun(string):string
+---@param render_function fun(to_render: FunctionSignature, generics: Type[]):string
+---@param render_type fun(type: Type, generics: Type[]):string
+---@return fun(member:table, generics: Type[])
+function getMacroRenderer(render, render_function, render_type)
+    return function(member, generics)
+        render_function(member.signature, generics)
+        render(" = macroexp(")
+
+
+        local as_ty = ty.NewFunctionFrom(member.signature)
+        local all_generics = generics
+        -- local all_generics = concat_array(
+        --     find_generics(as_ty),
+        --     generics
+        -- )
+        member.signature = as_ty:GetFunctionOrNil() --restore the otherwise consumed userdata
+        local size = #member.signature.params
+        for k, v in ipairs(member.signature.params) do
+            render(v.param_name[0])
+            render(" : ")
+            render_type(v.ty, all_generics)
+            if k < size then
+                render(",")
+            end
+        end
+        render("): ")
+        render_type(member.signature.returns[1], all_generics)
+        render("\n")
+        render(member.expr)
+        render("end")
+    end
+end
+
+---@param check string the haystack
+---@param start string the needle being searched for
+---@return boolean
+function startsWith(check, start)
+    return string.sub(check, 1, check.len(start)) == start
+end
+
+---@param check string the haystack
+---@param ending string the needle being searched for
+function endsWith(check, ending)
+    return ending == "" or check:sub(- #ending) == ending
 end
 
 local template, err = etlua.compile(template)

@@ -9,6 +9,14 @@ end
 local renderer = get_type_renderer(render, render_html)
 local type_name_getter = get_type_renderer(function() end)
 
+function render_function(func, generics)
+    renderer["function"](func, {generics = generics})
+end
+function render_type(ty, generics)
+    type_to_string(ty,renderer, {generics = generics})
+end
+
+local macro_renderer = getMacroRenderer(render,render_function, render_type)
 function split_used_by(users)
     local as_params = {}
     local as_returns = {}
@@ -217,33 +225,71 @@ function render_markdown(markdown)
 <% 
 end
 
-function render_function(func, generics)
-    renderer["function"](func, {generics = generics})
+
+
+function parts_are_empty(record, parts)
+    for _,part in ipairs(parts) do
+        local part = record[part]
+        if part ~= nil and #part > 0 then
+            return false
+        end
+    end
+    return true
 end
-function render_type(ty, generics)
-    type_to_string(ty,renderer, {generics = generics})
+
+function render_macro_expr(macro)
+%>
+    <code class="highlight">
+        <%render(macro)%>
+    </code>
+<%
 end
 
 function render_record_part(header_name, record, parts, generics)
+    if parts_are_empty(record, parts) then
+        return
+    end
+
     function render_part(part_name, record)
-        for x, member in pairs(dedupe_by(record[part_name],function(x)return x.name end)) do
+        local work_with = record[part_name]
+        local fallback_docs = ""
+        if part_name == "tag" then
+            print(part_name, record.tag)
+            work_with = {{
+                name="where",
+                value= record.tag
+            }}
+            fallback_docs = "The `where` macroexpr tells teal how to differentiate between types at run time"
+        else
+            work_with = dedupe_by(work_with,function(x)return x.name end)
+        end
+        for x, member in pairs(work_with) do
             local duped_generics = map(generics or {}, function(a) return a end)
             local to_render = function() return render_function(member, duped_generics) end
             if part_name == "fields" or part_name == "static_fields" then
                 to_render = function() return render_type(member.ty, duped_generics) end
+            elseif part_name == "tag" then
+                to_render = function() return render_macro_expr(member.value) end
+            elseif part_name == "macro_expressions" then
+                to_render = function() macro_renderer(member, duped_generics) end
             end
 %>
             <div class="card block">
                 <div id="<%= member.name -%>" class="card-heading">
                     <code class="card-header-title">
+<%
+                        if part_name == "macro_expressions" and member.is_meta_method then
+                            render("metamethod ")
+                        end
+%>
                         <p><%= member.name -%>: <% to_render() %> </p>
                     </code>
                 </div>
                 <% 
-                    if record.documentation[member.name] then 
+                    if record.documentation[member.name] or fallback_docs ~= "" then 
                 %>
                         <div class="card-content content">
-                            <% render_markdown(record.documentation[member.name]) %>
+                            <% render_markdown(record.documentation[member.name] or fallback_docs) %>
                         </div>
                 <%
                     end
@@ -513,6 +559,8 @@ page_name = page_name or type_name
                                                 "meta_function",
                                                 "meta_function_mut"
                                             }, generics)
+                                            render_record_part("Teal macro expressions", record,{"tag", "macro_expressions"}, generics)
+                                            
                                         end
                                         local enum = type_members:GetEnumOrNil()
                                         if enum then
@@ -576,7 +624,7 @@ page_name = page_name or type_name
                                             </div>
                                 <%
                                         end
-                                            if index then
+                                        if index then
                                 %>
                                             <div class="panel max-width">
                                                 <div class="panel-heading">
@@ -753,7 +801,12 @@ crossorigin="anonymous" referrerpolicy="no-referrer" />`
             otherLangSelectors[i].onclick = createSwitchLanguage(disableLanguage)
         }
     </script>
-    <script>hljs.highlightAll();</script>
+    <script>
+        hljs.highlightAll();
+        document
+            .querySelectorAll('code.highlight')
+            .forEach(el => hljs.highlightElement(el));
+    </script>
 </body>
 
 </html>

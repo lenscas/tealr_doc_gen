@@ -9,8 +9,17 @@ function render_nl(str)
 end
 
 local renderer = get_type_renderer(render)
+local toString = get_type_renderer(function(a) return a end)
 local extended_renderer = function(extend_with) return get_type_renderer(render, nil, extend_with) end
 
+function render_function(func, generics)
+    renderer["function"](func, {generics = generics})
+end
+function render_type(ty, generics)
+    type_to_string(ty,renderer, {generics = generics})
+end
+
+local macroRenderer = getMacroRenderer(render, render_function,render_type)
 function renderTealTypeOf(ty_name, with, maybe_extend_with)
     render(with)
     render(" ")
@@ -21,19 +30,52 @@ function renderTealTypeOf(ty_name, with, maybe_extend_with)
     type_to_string(ty_name, renderer_to_use, {})
 end
 
+function render_macroexpr(macro, generics)
+    if macro.is_meta_method then
+        render("metamethod ")
+    end
+    render(macro.name)
+    render(": ")
+    macroRenderer(macro, generics)
+end
 
 function render_member(member, generics)
-    render("        ")
-    render(member.name)
-    render(":")
+    
     if member.params then
+        render("        ")
+        render(member.name)
+        render(":")
         renderer["function"](member, {generics = generics})
     else
         local ty = member.ty
-        type_to_string(ty, renderer, {generics = generics})
+        local res = type_to_string(ty, toString, {generics = generics})
+        if startsWith(res, "\"") and endsWith(res, "\"") then
+            local withoutQuotes = string.sub(res, 2, #res-1)
+            local typeName = withoutQuotes.."Tag"
+            render("enum ")
+            render_nl(typeName)
+            render_nl(res)
+            render_nl("end")
+            res = typeName
+        end
+        render("        ")
+        render(member.name)
+        render(":")
+        render(res)
     end
     render_nl("")
 end
+
+function render_macros(macros,doc, existing_generics)
+    for _,macro in ipairs(macros) do
+        local docs = doc[macro.name]
+        if docs then
+            render_nl("    --"..string.gsub(docs, "\n", "\n        --"))
+        end
+        render_macroexpr(macro, map(existing_generics, function(a) return a end))
+    end
+end
+
 function render_members(members,doc, existing_generics)
     for _,member in ipairs(members) do
         local docs = doc[member.name]
@@ -55,8 +97,8 @@ end
                 render_nl("")
                 for _, variant in ipairs(enum.variants) do
                     render("        \"")
-                    render(variant)
-                    render_nl("\"")
+                    render(variant.."\"")
+                    render_nl""
                 end
     %>
     end
@@ -69,6 +111,9 @@ end
     <% renderTealTypeOf(record.ty,"record ") %>
         <%=(record.is_user_data and "userdata") or ""%>
     <%
+                    if record.tag ~= nil then
+                        render("where " .. record.tag)
+                    end
                 end
                 local generics =  get_missing_generics({record.ty},{})
                 local ty = record.ty:GetSingleOrNil()
@@ -83,6 +128,7 @@ end
                 render_members(record.meta_method_mut,record.documentation, generics)
                 render_members(record.meta_function,record.documentation, generics)
                 render_members(record.meta_function_mut,record.documentation, generics)
+                render_macros(record.macro_expressions, record.documentation, generics)
                 if not record.should_be_inlined then 
     %>
     end

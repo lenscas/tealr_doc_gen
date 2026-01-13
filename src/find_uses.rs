@@ -99,6 +99,8 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
         type_doc: Default::default(),
         next_docs: Default::default(),
         should_generate_help_method: Default::default(),
+        tag: Default::default(),
+        macro_expressions: Default::default(),
     };
     type_walker
         .iter()
@@ -128,31 +130,22 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
                         )
                     })
                 })
-                .chain(v.all_functions().filter_map(|y| {
-                    y.params
-                        .iter()
-                        .filter_map(|x| {
-                            drill_to_find(&x.ty, name_to_find).map(|_| {
-                                (
-                                    FoundAs::FunctionArgument,
-                                    NameAndSignature {
-                                        name: y.name.clone(),
-                                        signature: Type::Function(FunctionRepresentation {
-                                            params: y.params.clone(),
-                                            returns: y.returns.clone(),
-                                        }),
-                                    },
-                                )
-                            })
-                        })
-                        .next()
-                        .or_else(|| {
-                            y.returns
+                .chain(
+                    v.all_functions()
+                        .cloned()
+                        .chain(v.macro_expressions.iter().map(|x| tealr::ExportedFunction {
+                            name: x.name.clone(),
+                            params: x.signature.params.clone(),
+                            returns: x.signature.returns.clone(),
+                            is_meta_method: x.is_meta_method,
+                        }))
+                        .filter_map(|y| {
+                            y.params
                                 .iter()
                                 .filter_map(|x| {
-                                    drill_to_find(x, name_to_find).map(|_| {
+                                    drill_to_find(&x.ty, name_to_find).map(|_| {
                                         (
-                                            FoundAs::FunctionReturn,
+                                            FoundAs::FunctionArgument,
                                             NameAndSignature {
                                                 name: y.name.clone(),
                                                 signature: Type::Function(FunctionRepresentation {
@@ -164,8 +157,29 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
                                     })
                                 })
                                 .next()
-                        })
-                }))
+                                .or_else(|| {
+                                    y.returns
+                                        .iter()
+                                        .filter_map(|x| {
+                                            drill_to_find(x, name_to_find).map(|_| {
+                                                (
+                                                    FoundAs::FunctionReturn,
+                                                    NameAndSignature {
+                                                        name: y.name.clone(),
+                                                        signature: Type::Function(
+                                                            FunctionRepresentation {
+                                                                params: y.params.clone(),
+                                                                returns: y.returns.clone(),
+                                                            },
+                                                        ),
+                                                    },
+                                                )
+                                            })
+                                        })
+                                        .next()
+                                })
+                        }),
+                )
                 .for_each(|(found_as, member)| match found_as {
                     FoundAs::FunctionArgument => params.push(member),
                     FoundAs::FunctionReturn => returns.push(member),

@@ -1,5 +1,5 @@
 use tealr::{
-    mlu::{self, mlua::UserDataRef, TypedFunction},
+    mlu::{self, mlua::UserDataRef, TypedFunction, UserDataProxy},
     TypeWalker,
 };
 
@@ -15,48 +15,9 @@ pub(crate) use definition_file::generate_self_def;
 pub(crate) use html::generate_self_doc;
 pub(crate) use run::{run_from_walker, run_template};
 
-#[derive(tealr::ToTypename, tealr::mlu::UserData)]
-struct Foo();
-impl tealr::mlu::TealData for Foo {
-    fn add_methods<T: tealr::mlu::TealDataMethods<Self>>(methods: &mut T) {
-        methods.add_method(
-            "get_variadic",
-            |_, _, args: tealr::mlu::mlua::Variadic<i8>| {
-                let x: i8 = args.iter().sum();
-                Ok(x)
-            },
-        );
-        methods.add_method("return_variadic", |_, _, ()| {
-            Ok(tealr::mlu::mlua::Variadic::from(vec![1, 2, 3, 4, 5]))
-        });
-        methods.add_method(
-            "take_variadic_lambda",
-            |_, _, a: TypedFunction<tealr::mlu::mlua::Variadic<i8>, i8>| {
-                a.call(tealr::mlu::mlua::Variadic::from(vec![1, 2, 3, 4, 5]))
-            },
-        );
-        methods.add_method("return_variadic_lambda", |lua, _, ()| {
-            TypedFunction::from_rust(
-                |_, args: tealr::mlu::mlua::Variadic<i8>| Ok(args.iter().sum::<i8>()),
-                lua,
-            )
-        });
-        methods.add_method_mut(
-            "begin",
-            |_,
-             _,
-             _: tealr::mlu::TypedFunction<
-                i32,
-                (Option<bool>, tealr::mlu::mlua::Variadic<Option<i32>>),
-            >| { Ok(()) },
-        )
-    }
-}
-
 fn shared_types(walker: TypeWalker) -> TypeWalker {
     walker
         .process_type::<RenderOptions<mlu::generics::X>>()
-        .process_type::<Foo>()
         .process_type::<tealr::FunctionParam>()
         .process_type::<tealr::FunctionRepresentation>()
         .process_type::<tealr::MapRepresentation>()
@@ -64,6 +25,8 @@ fn shared_types(walker: TypeWalker) -> TypeWalker {
         .process_type::<tealr::Name>()
         .process_type::<tealr::ExtraPage>()
         .process_type::<tealr::Type>()
+        .process_type::<tealr::MacroExpr>()
+        .process_type::<UserDataProxy<tealr::Type>>()
         .process_type::<tealr::EnumGenerator>()
         .process_type::<tealr::ExportedFunction>()
         .process_type::<tealr::Field>()
@@ -153,5 +116,6 @@ fn shared_globals<T: mlu::InstanceCollector>(
             lua,
         )
     })?;
+    instance_collector.add_instance("ty", UserDataProxy::<tealr::Type>::new)?;
     Ok(())
 }
