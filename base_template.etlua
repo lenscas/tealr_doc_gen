@@ -9,10 +9,19 @@ end
 local renderer = get_type_renderer(render, render_html)
 local type_name_getter = get_type_renderer(function() end)
 
+function render_function(func, generics)
+    renderer["function"](func, {generics = generics})
+end
+function render_type(ty, generics)
+    type_to_string(ty,renderer, {generics = generics})
+end
+
+local macro_renderer = getMacroRenderer(render,render_function, render_type)
 function split_used_by(users)
     local as_params = {}
     local as_returns = {}
     local as_fields = {}
+    local as_inherits = {}
     for key, user in ipairs(users) do
         if #user.as_params > 0 then
             table.insert(as_params, {
@@ -32,12 +41,15 @@ function split_used_by(users)
                 as_fields=user.as_fields
             })
         end
+        if #user.inherits > 0 then
+            table.insert(as_inherits, {ty=user.ty, as_inherits=user.inherits})
+        end
     end
-    return as_params,as_returns,as_fields
+    return as_params,as_returns,as_fields, as_inherits
 end
 
 function render_used_by(users)
-    local as_params,as_returns,as_fields = split_used_by(users)
+    local as_params,as_returns,as_fields, as_inherits = split_used_by(users)
     local function render(to_render, name, field_name)
         if #to_render > 0 then
             
@@ -52,13 +64,13 @@ function render_used_by(users)
                             <li style="margin-top:1em; margin-bottom:1em;">
                                 <code class="is-size-6">
                                     <a
-                                        href="<%=type_to_link(used_in_type.ty) .. "#"..used_by.name%>"
+                                        href="<%=type_to_link(used_in_type.ty) .. "#".. (used_by.name or "" )%>"
                                     >
-                                        <%=type_name_getter.single(used_in_type.ty, {}).."."..used_by.name%>
+                                        <%=type_name_getter.single(used_in_type.ty, {})..((used_by.name and used_by.name.. ".") or "" )%>
                                     </a>
                                     <span>: </span>
                                     <span>
-                                        <%render_type(used_by.signature, map(used_in_type.ty.generics, function(a) return a end))%>
+                                        <%render_type((used_by.signature or used_by), map(used_in_type.ty.generics, function(a) return a end))%>
                                     </span>
                                 </code>
                             </li>
@@ -79,6 +91,7 @@ function render_used_by(users)
             render(as_params,"As Parameter:","as_params")
             render(as_returns,"Returned by:","as_returns")
             render(as_fields,"As field:","as_fields")
+            render(as_inherits,"Inherits:","as_inherits")
 %>
         </div>
     </div>
@@ -217,33 +230,70 @@ function render_markdown(markdown)
 <% 
 end
 
-function render_function(func, generics)
-    renderer["function"](func, {generics = generics})
+
+
+function parts_are_empty(record, parts)
+    for _,part in ipairs(parts) do
+        local part = record[part]
+        if part ~= nil and #part > 0 then
+            return false
+        end
+    end
+    return true
 end
-function render_type(ty, generics)
-    type_to_string(ty,renderer, {generics = generics})
+
+function render_macro_expr(macro)
+%>
+    <code class="highlight">
+        <%render(macro)%>
+    </code>
+<%
 end
 
 function render_record_part(header_name, record, parts, generics)
+    if parts_are_empty(record, parts) then
+        return
+    end
+
     function render_part(part_name, record)
-        for x, member in pairs(dedupe_by(record[part_name],function(x)return x.name end)) do
+        local work_with = record[part_name]
+        local fallback_docs = ""
+        if part_name == "tag" then
+            work_with = {{
+                name="where",
+                value= record.tag
+            }}
+            fallback_docs = "The `where` macroexpr tells teal how to differentiate between types at run time"
+        else
+            work_with = dedupe_by(work_with,function(x)return x.name end)
+        end
+        for x, member in pairs(work_with) do
             local duped_generics = map(generics or {}, function(a) return a end)
             local to_render = function() return render_function(member, duped_generics) end
             if part_name == "fields" or part_name == "static_fields" then
                 to_render = function() return render_type(member.ty, duped_generics) end
+            elseif part_name == "tag" then
+                to_render = function() return render_macro_expr(member.value) end
+            elseif part_name == "macro_expressions" then
+                to_render = function() macro_renderer(member, duped_generics) end
             end
 %>
             <div class="card block">
                 <div id="<%= member.name -%>" class="card-heading">
                     <code class="card-header-title">
+<%
+                        if part_name == "macro_expressions" and member.is_meta_method then
+                            render("metamethod ")
+                        end
+%>
                         <p><%= member.name -%>: <% to_render() %> </p>
                     </code>
                 </div>
                 <% 
-                    if record.documentation[member.name] then 
+                    if record.documentation[member.name] or fallback_docs ~= "" then 
                 %>
                         <div class="card-content content">
-                            <% render_markdown(record.documentation[member.name]) %>
+                            <% render_markdown(record.documentation[member.name] or fallback_docs) %>
                         </div>
                 <%
                     end
@@ -263,6 +313,46 @@ function render_record_part(header_name, record, parts, generics)
 <%
                 for _,name in ipairs(parts) do
                     render_part(name,record)
+                end
+%>
+            </div>
+        </div>
+    </div>
+<%
+end
+
+function render_inherits(record,generics)
+    local inherits = {}
+    if record.is_user_data then
+        table.insert(inherits, "userdata")
+    else
+        inherits = concat_array(inherits, record.implements)
+    end
+    
+%>
+    <div class="panel max-width">
+        <div class="panel-heading">
+            <p class="subtitle">Inherits:</p>
+        </div>
+        <div class="panel-block">
+            <div class="container max-width">
+<%
+                for _,inherit in ipairs(inherits) do
+%>
+                    <div class="card block">
+                        <div class="card-heading">
+                            <code class="card-header-title">
+<%
+                                if type(inherit) == "string" then
+                                    render(inherit)
+                                else
+                                    render_type(inherit, map(generics, function(a) return a end))
+                                end
+%>
+                            </code>
+                        </div>
+                    </div>
+<%
                 end
 %>
             </div>
@@ -513,6 +603,10 @@ page_name = page_name or type_name
                                                 "meta_function",
                                                 "meta_function_mut"
                                             }, generics)
+                                            render_record_part("Teal macro expressions", record,{"tag", "macro_expressions"}, generics)
+
+                                            render_inherits(record, generics)
+                                            
                                         end
                                         local enum = type_members:GetEnumOrNil()
                                         if enum then
@@ -576,7 +670,7 @@ page_name = page_name or type_name
                                             </div>
                                 <%
                                         end
-                                            if index then
+                                        if index then
                                 %>
                                             <div class="panel max-width">
                                                 <div class="panel-heading">
@@ -753,7 +847,12 @@ crossorigin="anonymous" referrerpolicy="no-referrer" />`
             otherLangSelectors[i].onclick = createSwitchLanguage(disableLanguage)
         }
     </script>
-    <script>hljs.highlightAll();</script>
+    <script>
+        hljs.highlightAll();
+        document
+            .querySelectorAll('code.highlight')
+            .forEach(el => hljs.highlightElement(el));
+    </script>
 </body>
 
 </html>

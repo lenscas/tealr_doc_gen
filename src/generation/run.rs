@@ -53,6 +53,7 @@ pub(crate) fn run_from_walker(
     let link_path = Path::new("/").join(&paths.root);
 
     let mut z = RecordGenerator::new::<RecordGenerator>(true);
+
     let sidebar = generate_sidebar_data(&type_defs, &paths, &link_path);
     for type_def in type_defs.iter() {
         let users = crate::find_uses::find_users(type_def, &type_defs);

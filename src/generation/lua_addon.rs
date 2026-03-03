@@ -184,6 +184,23 @@ fn write_record_as_class(
         }
         fields.push_str("---@class ");
         fields.push_str(class_name);
+        if generator.is_user_data || !generator.implements.is_empty() {
+            fields.push(':');
+        }
+        if generator.is_user_data {
+            fields.push_str("userdata");
+            if !generator.implements.is_empty() {
+                fields.push_str(" , ");
+            }
+        }
+        fields.push_str(
+            &generator
+                .implements
+                .iter()
+                .map(|v| type_to_name(v, "", TypeIsPartOf::None))
+                .collect::<Vec<_>>()
+                .join(" , "),
+        );
         fields.push('\n');
     }
     if write_class {

@@ -18,22 +18,24 @@ serde = "1.0.136"
 serde_json = "1.0.79"
 
 minify-html = "0.15.0"
-tealr = { version = "0.10.0", git = "https://github.com/lenscas/tealr", features = [
+tealr = { version = "0.11.0", git = "https://github.com/lenscas/tealr", features = [
     "mlua",
     "mlua_lua54",
     "mlua_vendored",
     "mlua_anyhow",
     "derive",
+    "self_to_lua",
 
 ], default-features = false }
 sanitize-filename = "0.5.0"
 
-# tealr = { version = "0.10.0", path = "../tealr2", features = [
+# tealr = { version = "0.11.0", path = "../tealr2", features = [
 #     "mlua",
 #     "mlua_lua54",
 #     "mlua_vendored",
 #     "mlua_anyhow",
 #     "derive",
+#     "self_to_lua",
 # ], default-features = false }
 v_htmlescape = "0.15.8"
 zip = { version = "2.2.0", default-features = false, features = ["deflate"] }
