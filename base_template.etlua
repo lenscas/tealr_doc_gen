@@ -21,6 +21,7 @@ function split_used_by(users)
     local as_params = {}
     local as_returns = {}
     local as_fields = {}
+    local as_inherits = {}
     for key, user in ipairs(users) do
         if #user.as_params > 0 then
             table.insert(as_params, {
@@ -40,12 +41,15 @@ function split_used_by(users)
                 as_fields=user.as_fields
             })
         end
+        if #user.inherits > 0 then
+            table.insert(as_inherits, {ty=user.ty, as_inherits=user.inherits})
+        end
     end
-    return as_params,as_returns,as_fields
+    return as_params,as_returns,as_fields, as_inherits
 end
 
 function render_used_by(users)
-    local as_params,as_returns,as_fields = split_used_by(users)
+    local as_params,as_returns,as_fields, as_inherits = split_used_by(users)
     local function render(to_render, name, field_name)
         if #to_render > 0 then
             
@@ -60,13 +64,13 @@ function render_used_by(users)
                             <li style="margin-top:1em; margin-bottom:1em;">
                                 <code class="is-size-6">
                                     <a
-                                        href="<%=type_to_link(used_in_type.ty) .. "#"..used_by.name%>"
+                                        href="<%=type_to_link(used_in_type.ty) .. "#".. (used_by.name or "" )%>"
                                     >
-                                        <%=type_name_getter.single(used_in_type.ty, {}).."."..used_by.name%>
+                                        <%=type_name_getter.single(used_in_type.ty, {})..((used_by.name and used_by.name.. ".") or "" )%>
                                     </a>
                                     <span>: </span>
                                     <span>
-                                        <%render_type(used_by.signature, map(used_in_type.ty.generics, function(a) return a end))%>
+                                        <%render_type((used_by.signature or used_by), map(used_in_type.ty.generics, function(a) return a end))%>
                                     </span>
                                 </code>
                             </li>
@@ -87,6 +91,7 @@ function render_used_by(users)
             render(as_params,"As Parameter:","as_params")
             render(as_returns,"Returned by:","as_returns")
             render(as_fields,"As field:","as_fields")
+            render(as_inherits,"Inherits:","as_inherits")
 %>
         </div>
     </div>
@@ -254,7 +259,6 @@ function render_record_part(header_name, record, parts, generics)
         local work_with = record[part_name]
         local fallback_docs = ""
         if part_name == "tag" then
-            print(part_name, record.tag)
             work_with = {{
                 name="where",
                 value= record.tag
@@ -309,6 +313,46 @@ function render_record_part(header_name, record, parts, generics)
 <%
                 for _,name in ipairs(parts) do
                     render_part(name,record)
+                end
+%>
+            </div>
+        </div>
+    </div>
+<%
+end
+
+function render_inherits(record,generics)
+    local inherits = {}
+    if record.is_user_data then
+        table.insert(inherits, "userdata")
+    else
+        inherits = concat_array(inherits, record.implements)
+    end
+    
+%>
+    <div class="panel max-width">
+        <div class="panel-heading">
+            <p class="subtitle">Inherits:</p>
+        </div>
+        <div class="panel-block">
+            <div class="container max-width">
+<%
+                for _,inherit in ipairs(inherits) do
+%>
+                    <div class="card block">
+                        <div class="card-heading">
+                            <code class="card-header-title">
+<%
+                                if type(inherit) == "string" then
+                                    render(inherit)
+                                else
+                                    render_type(inherit, map(generics, function(a) return a end))
+                                end
+%>
+                            </code>
+                        </div>
+                    </div>
+<%
                 end
 %>
             </div>
@@ -560,6 +604,8 @@ page_name = page_name or type_name
                                                 "meta_function_mut"
                                             }, generics)
                                             render_record_part("Teal macro expressions", record,{"tag", "macro_expressions"}, generics)
+
+                                            render_inherits(record, generics)
                                             
                                         end
                                         local enum = type_members:GetEnumOrNil()

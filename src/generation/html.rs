@@ -107,7 +107,8 @@ impl ExportInstances for GlobalInstancesDoc {
         instance_collector.add_instance("type_to_link", move |lua| {
             let link = link_path2;
             let all_types = all_types2;
-            TypedFunction::from_rust(
+
+            TypedFunction::from_rust_mut(
                 move |_, ty: SingleTypeNoConsume| {
                     let all_types = all_types.clone();
                     let link = link.clone();

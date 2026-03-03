@@ -22,6 +22,7 @@ pub struct User {
     ///
     ///This can be as it contains just this type, or because it is part of a more complex type like an array or a function
     as_fields: Vec<NameAndSignature>,
+    inherits: Vec<Type>,
 }
 
 enum FoundAs {
@@ -101,6 +102,7 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
         should_generate_help_method: Default::default(),
         tag: Default::default(),
         macro_expressions: Default::default(),
+        implements: Default::default(),
     };
     type_walker
         .iter()
@@ -187,7 +189,13 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
                         fields.push(member);
                     }
                 });
-            if params.is_empty() && returns.is_empty() && fields.is_empty() {
+            let inherits: Vec<Type> = v
+                .implements
+                .iter()
+                .filter(|x| drill_to_find(x, name_to_find).is_some())
+                .map(|x| x.to_owned())
+                .collect();
+            if params.is_empty() && returns.is_empty() && fields.is_empty() && inherits.is_empty() {
                 return None;
             }
             Some(User {
@@ -195,6 +203,7 @@ pub fn find_users(teal_type: &tealr::TypeGenerator, type_walker: &TypeWalker) ->
                 as_params: params,
                 as_return: returns,
                 as_fields: fields,
+                inherits,
             })
         })
         .collect()

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf, sync::Mutex};
 
 use tealr::{
     mlu::{
@@ -217,6 +217,14 @@ impl ToTypename for SingleTypeNoConsume {
         SingleType::to_function_param()
     }
 }
+#[derive(PartialEq, Eq, Hash)]
+pub enum WarningType {
+    UnknownType(Name),
+    MultipleTypes(Name),
+}
+
+static EMITTED_WARNINGS: std::sync::LazyLock<Mutex<HashSet<WarningType>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn type_to_link_url(
     ty: impl Into<SingleTypeNoConsume>,
@@ -236,10 +244,22 @@ pub fn type_to_link_url(
         if ty.name == Name::from("index") {
             return Some(link_path);
         }
-        eprintln!("Tried making link to unknown type: {}", ty.name);
+        if EMITTED_WARNINGS
+            .lock()
+            .unwrap()
+            .insert(WarningType::UnknownType(ty.name.clone()))
+        {
+            eprintln!("Tried making link to unknown type: {}", ty.name);
+        }
+
         return None;
     };
-    if x.next().is_some() {
+    if x.next().is_some()
+        && EMITTED_WARNINGS
+            .lock()
+            .unwrap()
+            .insert(WarningType::MultipleTypes(found_type.name.clone()))
+    {
         eprintln!("Multiple types with the same name: {}", found_type.name);
     }
     let name = if generator.is_inlined() {

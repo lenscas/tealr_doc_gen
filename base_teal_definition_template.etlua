@@ -91,6 +91,7 @@ end
 <%- global_or_local %> record <%- name %>
     <% 
         for _, teal_type in ipairs(module.given_types) do 
+            
             local enum = teal_type:GetEnumOrNil()
             if enum then
                 renderTealTypeOf(enum.ty,"enum ")
@@ -106,16 +107,24 @@ end
             end
             local record = teal_type:GetRecordOrNil()
             if record then
+                local generics =  get_missing_generics({record.ty},{})
                 if not record.should_be_inlined then
     %>
-    <% renderTealTypeOf(record.ty,"record ") %>
-        <%=(record.is_user_data and "userdata") or ""%>
+
+    <% 
+        renderTealTypeOf(record.ty,"interface ")
+    %>
+        <%=(record.is_user_data and "is userdata") or ""%>
     <%
+                    for _,v in ipairs(record.implements) do
+                        render("    is ")
+                        type_to_string(v, renderer, {generics = map(generics, function(a) return a end)})
+                        render_nl("")
+                    end
                     if record.tag ~= nil then
                         render("where " .. record.tag)
                     end
                 end
-                local generics =  get_missing_generics({record.ty},{})
                 local ty = record.ty:GetSingleOrNil()
                 render_nl("--"..string.gsub(record.type_doc, "\n", "\n        --"))
                 render_members(record.fields,record.documentation, generics)

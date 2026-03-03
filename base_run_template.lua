@@ -139,7 +139,7 @@ function get_type_renderer(render_in, render_html_in, type_appendage)
                 param_name = "..."
             end
             if type(param_name) == "table" then
-                param_name = param_name[0]
+                param_name = param_name.param0
             end
             if param_name then
                 rendered = rendered .. render(param_name)
@@ -228,7 +228,7 @@ function get_type_renderer(render_in, render_html_in, type_appendage)
         local rendered = ""
         local name = ty.name
         if type(name) == "table" then
-            name = name[0]
+            name = name.param0
         end
         if ty.kind == "External" then
             if render_html then
@@ -288,14 +288,11 @@ function getMacroRenderer(render, render_function, render_type)
 
         local as_ty = ty.NewFunctionFrom(member.signature)
         local all_generics = generics
-        -- local all_generics = concat_array(
-        --     find_generics(as_ty),
-        --     generics
-        -- )
+
         member.signature = as_ty:GetFunctionOrNil() --restore the otherwise consumed userdata
         local size = #member.signature.params
         for k, v in ipairs(member.signature.params) do
-            render(v.param_name[0])
+            render(v.param_name.param0)
             render(" : ")
             render_type(v.ty, all_generics)
             if k < size then
